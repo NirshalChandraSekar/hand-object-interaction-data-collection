@@ -6,6 +6,7 @@ import pyrealsense2 as rs
 import numpy as np
 import h5py
 import cv2
+import time
 
 
 class Camera:
@@ -24,9 +25,9 @@ class Camera:
             for device in devices:
                 print(f"  - {device.get_info(rs.camera_info.name)} (Serial: {device.get_info(rs.camera_info.serial_number)})")
 
-        
+
     def view_camera_streams(self, serial_numbers=[device.get_info(rs.camera_info.serial_number) for device in rs.context().query_devices()]):
-        
+
         # Create a pipeline and config for each camera
         pipelines = []
         for serial in serial_numbers:
@@ -65,12 +66,14 @@ class Camera:
             for pipeline in pipelines:
                 pipeline.stop()
             cv2.destroyAllWindows()
-        
 
-    def record_video_streams(self, serial_numbers=[device.get_info(rs.camera_info.serial_number) for device in rs.context().query_devices()], 
-                       output_file='dataset/video_data.h5'):
-        # Create a pipeline and config for each camera
+    def record_video_streams(self, output_file='dataset/video_data.h5', duration=10, serial_numbers=None):
+        if serial_numbers is None:
+            serial_numbers = [device.get_info(rs.camera_info.serial_number) for device in self.ctx.query_devices()]
+
         pipelines = []
+        align = rs.align(rs.stream.color)
+
         for serial in serial_numbers:
             pipeline = rs.pipeline()
             config = rs.config()
@@ -80,43 +83,44 @@ class Camera:
             pipeline.start(config)
             pipelines.append(pipeline)
 
-        with h5py.File(output_file, 'w') as h5file:
-            frame_count = 0
-            try:
-                while True:
-                    # Create a group for this frame
-                    frame_group = h5file.create_group(f'frame_{frame_count}')
-                    # Create a video_streams group within the frame group
-                    video_streams_group = frame_group.create_group('video_streams')
-                    
+        try:
+            with h5py.File(output_file, 'w') as h5file:
+                color_groups = {serial: h5file.create_group(f"{serial}/color") for serial in serial_numbers}
+                depth_groups = {serial: h5file.create_group(f"{serial}/depth") for serial in serial_numbers}
+                frame_counters = {serial: 0 for serial in serial_numbers}
+
+                print("[INFO] Recording started. Press Ctrl+C to stop early.")
+                start_time = time.time()
+
+                while time.time() - start_time < duration:
                     for i, pipeline in enumerate(pipelines):
                         frames = pipeline.wait_for_frames()
-                        color_frame = frames.get_color_frame()
-                        depth_frame = frames.get_depth_frame()
+                        aligned_frames = align.process(frames)
+                        color_frame = aligned_frames.get_color_frame()
+                        depth_frame = aligned_frames.get_depth_frame()
 
-                        # if not color_frame or not depth_frame:
-                        #     continue
+                        if not color_frame or not depth_frame:
+                            continue
 
                         color_image = np.asanyarray(color_frame.get_data())
-                        
-                        # Align depth to color
-                        aligned_frames = rs.align(rs.stream.color).process(frames)
-                        aligned_depth_frame = aligned_frames.get_depth_frame()
-                        aligned_depth_image = np.asanyarray(aligned_depth_frame.get_data())
+                        depth_image = np.asanyarray(depth_frame.get_data())
 
-                        # Store images in the video_streams group for this frame
-                        video_streams_group.create_dataset(f'color_{serial_numbers[i]}', data=color_image)
-                        video_streams_group.create_dataset(f'depth_{serial_numbers[i]}', data=aligned_depth_image)
-                    
-                    frame_count += 1
-                    if cv2.waitKey(1) & 0xFF == ord('q'):
-                        break
-            finally:
-                for pipeline in pipelines:
-                    pipeline.stop()
+                        serial = serial_numbers[i]
+                        idx = frame_counters[serial]
+                        color_groups[serial].create_dataset(str(idx), data=color_image, compression='gzip')
+                        depth_groups[serial].create_dataset(str(idx), data=depth_image, compression='gzip')
+                        frame_counters[serial] += 1
 
+        except KeyboardInterrupt:
+            print("[INFO] Recording interrupted by user.")
+        finally:
+            for pipeline in pipelines:
+                pipeline.stop()
+            print("[INFO] All pipelines stopped.")
+    
 if __name__ == "__main__":
     camera = Camera()
     # camera.check_available_cameras()
     # camera.view_camera_streams()
     camera.record_video_streams(output_file='dataset/trial_dataset/check_video_data.h5')
+    
