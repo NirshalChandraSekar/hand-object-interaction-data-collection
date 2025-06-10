@@ -67,7 +67,7 @@ class Camera:
                 pipeline.stop()
             cv2.destroyAllWindows()
 
-    def record_video_streams(self, output_file='dataset/video_data.h5', duration=10, serial_numbers=None):
+    def record_video_streams(self, output_file='dataset/video_data.h5', duration=20, serial_numbers=None):
         if serial_numbers is None:
             serial_numbers = [device.get_info(rs.camera_info.serial_number) for device in self.ctx.query_devices()]
 
@@ -120,7 +120,7 @@ class Camera:
     
 if __name__ == "__main__":
     camera = Camera()
-    # camera.check_available_cameras()
+    camera.check_available_cameras()
     # camera.view_camera_streams()
-    camera.record_video_streams(output_file='dataset/trial_dataset/check_video_data.h5')
+    # camera.record_video_streams(output_file='dataset/trial_dataset/check_video_data.h5')
     

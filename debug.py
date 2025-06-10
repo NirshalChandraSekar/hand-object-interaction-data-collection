@@ -5,7 +5,7 @@ import mediapipe as mp
 import open3d as o3d
 
 dataset_path = 'dataset/trial_dataset/check_video_data.h5'  # <- change this to your actual path if needed
-serial_numbers = ['213522250729', '213622251272']  # <- update these to your recorded camera serial numbers
+serial_numbers = ['213622251272', '213522250729']  # <- update these to your recorded camera serial numbers
 
 def save_video_from_dataset(dataset_path, output_video_path, serial_numbers):
     with h5py.File(dataset_path, 'r') as dataset:
