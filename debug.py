@@ -1,8 +1,9 @@
 import h5py
 import cv2
 import numpy as np
-import mediapipe as mp
+# import mediapipe as mp
 import open3d as o3d
+import pyrealsense2 as rs
 
 dataset_path = 'dataset/trial_dataset/check_video_data.h5'  # <- change this to your actual path if needed
 serial_numbers = ['213622251272', '213522250729']  # <- update these to your recorded camera serial numbers
@@ -118,6 +119,7 @@ def view_recorded_stream(dataset_path, serial_numbers):
 
     cv2.destroyAllWindows()
 
+
 def view_point_cloud(dataset_path, serial_number):
     with h5py.File(dataset_path, 'r') as dataset:
         color_image = dataset[serial_number]['color'][str(0)][()]
@@ -134,9 +136,39 @@ def view_point_cloud(dataset_path, serial_number):
         o3d.visualization.draw_geometries([pcd])
 
 
+def get_camera_intrinsics(serial_numbers=None):
+    # Create a context object
+    ctx = rs.context()
+    
+    # If no serial numbers are provided, query all connected devices
+    if serial_numbers is None:
+        serial_numbers = [device.get_info(rs.camera_info.serial_number) for device in ctx.query_devices()]
+    
+    for serial in serial_numbers:
+        try:
+            # Get the device by serial number
+            device = next(dev for dev in ctx.query_devices() if dev.get_info(rs.camera_info.serial_number) == serial)
+            depth_sensor = device.first_depth_sensor()
+            
+            # Get the intrinsics of the first depth stream
+            intrinsics = depth_sensor.get_stream_profiles()[0].as_video_stream_profile().get_intrinsics()
+            
+            # Print the intrinsics
+            print(f"Camera {serial} Intrinsics:")
+            print(f"  Width: {intrinsics.width}")
+            print(f"  Height: {intrinsics.height}")
+            print(f"  Focal Length (fx, fy): ({intrinsics.fx}, {intrinsics.fy})")
+            print(f"  Principal Point (ppx, ppy): ({intrinsics.ppx}, {intrinsics.ppy})")
+            print(f"  Distortion Model: {intrinsics.model}")
+            print(f"  Distortion Coefficients: {intrinsics.coeffs}")
+        except StopIteration:
+            print(f"Camera with serial {serial} not found.")
+
 # save_video_from_dataset(dataset_path, combined_video.MP4, serial_numbers)
 # run_mediapipe_on_videos(dataset_path, 'mediapipe_combined_video.MP4', serial_numbers)
-view_point_cloud(dataset_path, serial_numbers[0])
+# view_point_cloud(dataset_path, serial_numbers[0])
+
+get_camera_intrinsics(serial_numbers)
 
 
 
