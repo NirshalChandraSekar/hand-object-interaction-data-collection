@@ -120,7 +120,7 @@ class Camera:
     
 if __name__ == "__main__":
     camera = Camera()
-    # camera.check_available_cameras()
-    # camera.view_camera_streams()
-    camera.record_video_streams(output_file='dataset/trial_dataset/check_video_data.h5')
+    camera.check_available_cameras()
+    camera.view_camera_streams()
+    # camera.record_video_streams(output_file='dataset/trial_dataset/check_video_data.h5')
     
