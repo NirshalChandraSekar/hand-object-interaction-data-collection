@@ -191,7 +191,7 @@ def view_point_cloud_single_camera(dataset_path = 'dataset/trial_dataset/check_v
             o3d.geometry.Image(color_image),
             o3d.geometry.Image(depth_image),
             depth_scale=1,  # Adjust based on your depth image scale
-            depth_trunc=3.0,  # Truncate depth values beyond this distance
+            depth_trunc=1.5,  # Truncate depth values beyond this distance
             convert_rgb_to_intensity=False)
         
         pcd = o3d.geometry.PointCloud.create_from_rgbd_image(rgbd_image, intrinsic)
@@ -202,7 +202,7 @@ def view_point_cloud_single_camera(dataset_path = 'dataset/trial_dataset/check_v
 '''
 Transformation matrix:
 
-[ -0.986436, -0.1571164, -0.04752302, -0.04698686; 0.1640189, -0.9548615, -0.2476637, -0.07646833; -0.006465859, -0.2520991, 0.9676798, -0.07681673; 0, 0, 0, 1 ]
+[  -0.8387982, -0.3911612, 0.3786957, -0.2170857; 0.3091259, 0.2304021, 0.9226896, -0.6857208; -0.4481726, 0.891015, -0.07234281, 0.5222885 ; 0, 0, 0, 1 ]
 '''
 
 def view_combined_point_cloud(dataset_path, serial_numbers = serial_numbers):
@@ -223,7 +223,7 @@ def view_combined_point_cloud(dataset_path, serial_numbers = serial_numbers):
             o3d.geometry.Image(color_image_master),
             o3d.geometry.Image(depth_image_master),
             depth_scale=1,  # Adjust based on your depth image scale
-            depth_trunc=3.0,  # Truncate depth values beyond this distance
+            depth_trunc=1,  # Truncate depth values beyond this distance
             convert_rgb_to_intensity=False)
         pcd_master = o3d.geometry.PointCloud.create_from_rgbd_image(rgbd_image_master, 
                                                                     intrinsic_master,
@@ -245,31 +245,23 @@ def view_combined_point_cloud(dataset_path, serial_numbers = serial_numbers):
             o3d.geometry.Image(color_image_slave),
             o3d.geometry.Image(depth_image_slave),
             depth_scale=1,  # Adjust based on your depth image scale
-            depth_trunc=3.0,  # Truncate depth values beyond this distance
+            depth_trunc=1.5,  # Truncate depth values beyond this distance
             convert_rgb_to_intensity=False)
-        transform_matrix = np.array([
-            [-0.986436, -0.1571164, -0.04752302, -0.04698686],
-            [0.1640189, -0.9548615, -0.2476637, -0.07646833],
-            [-0.006465859, -0.2520991, 0.9676798, -0.07681673],
-            [0, 0, 0, 1]
-        ], dtype=np.float32)
+        transform_matrix = np.array([[-0.8387982, -0.3911612, 0.3786957, -0.2170857],
+                                     [0.3091259, 0.2304021, 0.9226896, -0.6857208],
+                                     [-0.4481726, 0.891015, -0.07234281, 0.5222885],
+                                    [0, 0, 0, 1]], dtype=np.float32)
         
-        # transform_matrix = np.linalg.inv(transform_matrix)  # Invert the transformation matrix for the slave camera
+        transform_matrix = np.linalg.inv(transform_matrix)  # Invert the transformation matrix for the slave camera
 
         pcd_slave = o3d.geometry.PointCloud.create_from_rgbd_image(rgbd_image_slave, 
                                                                     intrinsic_slave,
                                                                     extrinsic=transform_matrix)
         
-        o3d.visualization.draw_geometries([pcd_master, pcd_slave])   
+        o3d.visualization.draw_geometries([pcd_master, pcd_slave])
 
-
-
-# view_point_cloud_single_camera(dataset_path)
-view_combined_point_cloud(dataset_path)
-
-
-
-
-
+# save_video_from_dataset(dataset_path, 'videos/output_video.mp4', serial_numbers)
+# view_recorded_stream(dataset_path, serial_numbers)
+# view_combined_point_cloud(dataset_path, serial_numbers)
 
 
