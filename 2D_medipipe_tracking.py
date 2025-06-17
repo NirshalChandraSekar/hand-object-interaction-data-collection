@@ -17,7 +17,7 @@ def media_on_single_frame(dataset_path, serial_number = serial_numbers[1], frame
         results = hands.process(cv2.cvtColor(color_image, cv2.COLOR_BGR2RGB))
         return results
 
-def pointcloud(dataset_path, serial_number = serial_numbers[1], frame_index=0):
+def pointcloud(dataset_path, serial_number = serial_numbers[1], frame_index=50):
     with h5py.File(dataset_path, 'r') as dataset:
         color_image = dataset[serial_number]['color'][str(frame_index)][()]
         color_image = cv2.cvtColor(color_image, cv2.COLOR_BGR2RGB)
@@ -71,31 +71,46 @@ def pointcloud(dataset_path, serial_number = serial_numbers[1], frame_index=0):
             sphere.paint_uniform_color([1, .5, .5])  # Red
             sphere.translate(wrist_3d)
 
-            o3d.visualization.draw_geometries([pcd, sphere])
+            sphere_x = o3d.geometry.TriangleMesh.create_sphere(radius=0.01)
+            sphere_x.translate([1, 0, 0])
+            sphere_y = o3d.geometry.TriangleMesh.create_sphere(radius=0.01)
+            sphere_y.translate([0, 1, 0])
+            sphere_z = o3d.geometry.TriangleMesh.create_sphere(radius=0.01)
+            sphere_z.translate([0, 0, 1])
+            sphere_x.paint_uniform_color([1, 0, 0])  # Red
+            sphere_y.paint_uniform_color([0, 1, 0])  # Green
+            sphere_z.paint_uniform_color([0, 0, 1])  # Blue
+
+            sphere_origin = o3d.geometry.TriangleMesh.create_sphere(radius=0.01)
+            sphere_origin.paint_uniform_color([0, 0, 0])  # Black
+
+            o3d.visualization.draw_geometries([pcd, sphere, sphere_x, sphere_y, sphere_z, sphere_origin])  
         else:
              o3d.visualization.draw_geometries([pcd])
 
-def all_frames_pcd(dataset_path, serial_number, start_frame=0, end_frame=10):
-    intrinsics_ = np.load(f'data/{serial_number}_intrinsics.npy', allow_pickle=True).item()
-    intrinsic = o3d.camera.PinholeCameraIntrinsic(
-        width=intrinsics_['width'],
-        height=intrinsics_['height'],
-        fx=intrinsics_['fx'],
-        fy=intrinsics_['fy'],
-        cx=intrinsics_['ppx'],
-        cy=intrinsics_['ppy'])
-    
-    vis = o3d.visualization.Visualizer()
-    vis.create_window()
-    
-    sphere = o3d.geometry.TriangleMesh.create_sphere(radius=0.02)
-    sphere.paint_uniform_color([1, 0, 0])  # red sphere
-    sphere_visible = False
-    
-    pcd = None
-    
-    for frame_index in range(start_frame, end_frame):
-        with h5py.File(dataset_path, 'r') as dataset:
+def mediapipe_singleview_pcd(dataset_path, serial_number):
+    with h5py.File(dataset_path, 'r') as dataset:
+        intrinsics_ = np.load(f'data/{serial_number}_intrinsics.npy', allow_pickle=True).item()
+        intrinsic = o3d.camera.PinholeCameraIntrinsic(
+            width=intrinsics_['width'],
+            height=intrinsics_['height'],
+            fx=intrinsics_['fx'],
+            fy=intrinsics_['fy'],
+            cx=intrinsics_['ppx'],
+            cy=intrinsics_['ppy'])
+        
+        vis = o3d.visualization.Visualizer()
+        vis.create_window()
+        view_control = vis.get_view_control() 
+
+        sphere = o3d.geometry.TriangleMesh.create_sphere(radius=0.02)
+        sphere.paint_uniform_color([1, 0, 0])  # red sphere
+        sphere_visible = False
+        
+        pcd = None
+        
+        for frame_index in range(len(dataset[serial_number]['color'].keys())):
+            
             color_image = dataset[serial_number]['color'][str(frame_index)][()]
             color_image = cv2.cvtColor(color_image, cv2.COLOR_BGR2RGB)
             
@@ -105,7 +120,7 @@ def all_frames_pcd(dataset_path, serial_number, start_frame=0, end_frame=10):
                 o3d.geometry.Image(color_image),
                 o3d.geometry.Image(depth_image),
                 depth_scale=1.0,
-                depth_trunc=3.0,
+                depth_trunc=1.5,
                 convert_rgb_to_intensity=False
             )
             
@@ -119,7 +134,6 @@ def all_frames_pcd(dataset_path, serial_number, start_frame=0, end_frame=10):
                 wrist_x_px = int(wrist.x * intrinsics_['width'])
                 wrist_y_px = int(wrist.y * intrinsics_['height'])
 
-                # Get depth at pixel
                 wrist_depth = depth_image[wrist_y_px, wrist_x_px] # Weird indexing
                 if wrist_depth == 0.0:
                     patch = depth_image[max(0, wrist_y_px-1):wrist_y_px+2, max(0, wrist_x_px-1):wrist_x_px+2]
@@ -137,12 +151,10 @@ def all_frames_pcd(dataset_path, serial_number, start_frame=0, end_frame=10):
             else:
                 wrist_3d = None
             
-            if frame_index == start_frame:
+            if frame_index == 0:
                 pcd = new_pcd
                 vis.add_geometry(pcd)
-                view_control = vis.get_view_control()
-                view_control.rotate(0, 180, 0, 0)
-                
+
                 if wrist_3d is not None:
                     sphere.translate(wrist_3d, relative=False)
                     vis.add_geometry(sphere)
@@ -164,15 +176,18 @@ def all_frames_pcd(dataset_path, serial_number, start_frame=0, end_frame=10):
                     if sphere_visible:
                         vis.remove_geometry(sphere)
                         sphere_visible = False
-            
+
+            view_control.set_front([0, -0.0, -1.0])  # Camera looks toward -Z
+            view_control.set_lookat([0, 0, 0])       # Look at the origin
+            view_control.set_up([0, -1.0, 0])        # Y points down (flip up) 
+
             vis.poll_events()
             vis.update_renderer()
-    
-    vis.destroy_window()
+        
+        vis.destroy_window()
 
 
 if __name__ == "__main__":
     # Example usage
-    with h5py.File(dataset_path, 'r') as dataset:
-        for serial in serial_numbers:
-            all_frames_pcd(dataset_path, serial, 0, len(dataset[serial]['color'].keys()))
+    for serial in serial_numbers:
+        mediapipe_singleview_pcd(dataset_path, serial)
