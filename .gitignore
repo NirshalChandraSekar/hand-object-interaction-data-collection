@@ -2,3 +2,6 @@
 dataset/
 videos/
 data/
+depth_pngs/
+pointclouds/
+2D_mediapipe_tracking.py

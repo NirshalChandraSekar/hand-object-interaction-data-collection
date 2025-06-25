@@ -4,9 +4,10 @@ This file contains the code to record video streams form realsense cameras and s
 
 import pyrealsense2 as rs
 import numpy as np
+import hdf5plugin
 import h5py
 import cv2
-import time
+from datetime import datetime, date, timezone
 
 
 class Camera:
@@ -66,33 +67,75 @@ class Camera:
             for pipeline in pipelines:
                 pipeline.stop()
             cv2.destroyAllWindows()
+    def get_camera_intrinsics(self, serial_number):
+            ctx = rs.context()
+            device = next(dev for dev in ctx.query_devices() if dev.get_info(rs.camera_info.serial_number) == serial_number)
+            depth_sensor = device.first_depth_sensor()
+            intr = depth_sensor.get_stream_profiles()[0].as_video_stream_profile().get_intrinsics()
+            return intr
 
-    def record_video_streams(self, output_file='dataset/video_data.h5', duration=10, serial_numbers=None):
+    def record_video_streams(self, serial_numbers=None):
         if serial_numbers is None:
             serial_numbers = [device.get_info(rs.camera_info.serial_number) for device in self.ctx.query_devices()]
 
         pipelines = []
         align = rs.align(rs.stream.color)
 
-        for serial in serial_numbers:
-            pipeline = rs.pipeline()
-            config = rs.config()
-            config.enable_device(serial)
-            config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
-            config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
-            pipeline.start(config)
-            pipelines.append(pipeline)
+        start_time = datetime.now(timezone.utc).isoformat()
+        output_file = f"dataset/trial_dataset/{start_time}.h5"
+
 
         try:
             with h5py.File(output_file, 'w') as h5file:
-                color_groups = {serial: h5file.create_group(f"{serial}/color") for serial in serial_numbers}
-                depth_groups = {serial: h5file.create_group(f"{serial}/depth") for serial in serial_numbers}
+                color_groups = {serial: h5file.create_group(f"{serial}/frames/color") for serial in serial_numbers}
+                depth_groups = {serial: h5file.create_group(f"{serial}/frames/depth") for serial in serial_numbers}
+                timestamps = {serial: h5file.create_dataset(f"{serial}/frames/timestamps",shape=(0,), maxshape=(None,), dtype='float64')
+                                                            for serial in serial_numbers}
+
+                params_group = {serial: h5file.create_group(f"{serial}/params") for serial in serial_numbers}
+
                 frame_counters = {serial: 0 for serial in serial_numbers}
 
-                print("[INFO] Recording started. Press Ctrl+C to stop early.")
-                start_time = time.time()
+                for serial in serial_numbers:
+                    # Set up pipelines
+                    pipeline = rs.pipeline()
+                    config = rs.config()
+                    config.enable_device(serial)
+                    config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
+                    config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
+                    pipeline.start(config)
+                    pipelines.append(pipeline)
 
-                while time.time() - start_time < duration:
+                    # Store params
+                    intr = self.get_camera_intrinsics(serial)
+                    intr_group = params_group[serial].create_group("intrinsics")
+                    intr_group.create_dataset("width", data=intr.width)
+                    intr_group.create_dataset("height", data=intr.height)
+                    intr_group.create_dataset("ppx", data=intr.ppx)
+                    intr_group.create_dataset("ppy", data=intr.ppy)
+                    intr_group.create_dataset("fx", data=intr.fx)
+                    intr_group.create_dataset("fy", data=intr.fy)
+                    intr_group.create_dataset("model", data=str(intr.model))
+                    intr_group.create_dataset("coeffs", data=intr.coeffs)
+
+                    # 
+                    params_group[serial].create_dataset("start_time", data=start_time, dtype=h5py.string_dtype(encoding='utf-8'))
+
+                print("Press the 'space' key to start recording")
+
+                cv2.namedWindow("Press 'space' to start recording", cv2.WINDOW_NORMAL)
+                while True:
+                    key = cv2.waitKey(0) & 0xFF
+                    if key == 32:
+                        break
+
+                cv2.destroyAllWindows()
+                
+                print("[INFO] Recording started. Press 'Ctrl + c' to stop")
+
+                recording_start = datetime.now(timezone.utc).timestamp()
+
+                while True:
                     for i, pipeline in enumerate(pipelines):
                         frames = pipeline.wait_for_frames()
                         aligned_frames = align.process(frames)
@@ -103,16 +146,19 @@ class Camera:
                             continue
 
                         color_image = np.asanyarray(color_frame.get_data())
-                        depth_image = np.asanyarray(depth_frame.get_data())
+                        depth_image = np.asanyarray(depth_frame.get_data()).astype(np.uint16)
 
                         serial = serial_numbers[i]
+                        utc_now = datetime.now(timezone.utc).timestamp() - recording_start
                         idx = frame_counters[serial]
-                        color_groups[serial].create_dataset(str(idx), data=color_image, compression='gzip')
-                        depth_groups[serial].create_dataset(str(idx), data=depth_image, compression='gzip')
-                        frame_counters[serial] += 1
+                        color_groups[serial].create_dataset(str(idx), data=color_image, compression='gzip', compression_opts=9, chunks = True)
+                        depth_groups[serial].create_dataset(str(idx), data=depth_image, compression='gzip', compression_opts=9, chunks=True)
+                        timestamps[serial].resize((idx + 1,))
+                        timestamps[serial][idx] = utc_now
 
+                        frame_counters[serial] += 1
         except KeyboardInterrupt:
-            print("[INFO] Recording interrupted by user.")
+            print("[INFO] Recording ended by user.")
         finally:
             for pipeline in pipelines:
                 pipeline.stop()
@@ -120,7 +166,7 @@ class Camera:
     
 if __name__ == "__main__":
     camera = Camera()
-    camera.check_available_cameras()
-    camera.view_camera_streams()
-    # camera.record_video_streams(output_file='dataset/trial_dataset/check_video_data.h5')
+    # camera.check_available_cameras()
+    # camera.view_camera_streams()
+    camera.record_video_streams()
     

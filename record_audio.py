@@ -20,7 +20,7 @@ def check_inputs():
     info = p.get_default_input_device_info()
     print("Default Device", info)
 
-def record_audio(index = 0, filename ="videos/recorded_audio.wav"):
+def record_audio(filename ="videos/recorded_audio.wav"):
     # Initialize PyAudio
     stream = audio.open(format=FORMAT,
                         channels=CHANNELS,
