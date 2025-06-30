@@ -209,11 +209,7 @@ def view_point_cloud_single_camera(dataset_path = 'dataset/trial_dataset/check_v
 '''
 Transformation matrix:
 
-213622251272 - 217222061083
-[ 0.05702207, -0.4745224, 0.8783945, -1.067303; 0.9192188, 0.3682892, 0.1392833, -0.4351598; -0.3895963, 0.7994946, 0.4571905, 0.3163233 ] 
-
-217222061083 - 213522250729
-[ 0.05936317, -0.8555212, 0.5143535, -0.4373211; 0.5357799, 0.4620624, 0.7067095, -0.5153366; -0.8422683, 0.2336278, 0.4858005, 0.8538319 ]
+ [ -0.9801651, -0.1587493, -0.1186386, -0.07690796; -0.01549144, -0.5354281, 0.8444387, -0.820531; -0.1975765, 0.8295272, 0.5223486, 0.3569262 ]
 '''
 
 def view_combined_point_cloud():
@@ -238,33 +234,33 @@ def view_combined_point_cloud():
                                                                 intrinsic_72,
                                                                 extrinsic=np.eye(4))
     
-    color_image_83 = cv2.imread(os.path.join('data', serial_numbers[2] + '_color.png'))
-    color_image_83 = cv2.cvtColor(color_image_83, cv2.COLOR_BGR2RGB)
-    depth_image_83 = (np.load(os.path.join('data', serial_numbers[2] + '_depth.npy'), allow_pickle=True) * 0.001).astype(np.float32)  # Convert depth to meters
-    intrinsic_83 = np.load(os.path.join('data', serial_numbers[2] + '_intrinsics.npy'), allow_pickle=True).item()
-    intrinsic_83 = o3d.camera.PinholeCameraIntrinsic(
-        width=intrinsic_83['width'],
-        height=intrinsic_83['height'],
-        fx=intrinsic_83['fx'],
-        fy=intrinsic_83['fy'],
-        cx=intrinsic_83['ppx'],
-        cy=intrinsic_83['ppy'])
-    rgbd_image_83 = o3d.geometry.RGBDImage.create_from_color_and_depth(
-        o3d.geometry.Image(color_image_83),
-        o3d.geometry.Image(depth_image_83),
-        depth_scale=1,  # Adjust based on your depth image scale
-        depth_trunc=1.5,  # Truncate depth values beyond this distance
-        convert_rgb_to_intensity=False)
+    # color_image_83 = cv2.imread(os.path.join('data', serial_numbers[2] + '_color.png'))
+    # color_image_83 = cv2.cvtColor(color_image_83, cv2.COLOR_BGR2RGB)
+    # depth_image_83 = (np.load(os.path.join('data', serial_numbers[2] + '_depth.npy'), allow_pickle=True) * 0.001).astype(np.float32)  # Convert depth to meters
+    # intrinsic_83 = np.load(os.path.join('data', serial_numbers[2] + '_intrinsics.npy'), allow_pickle=True).item()
+    # intrinsic_83 = o3d.camera.PinholeCameraIntrinsic(
+    #     width=intrinsic_83['width'],
+    #     height=intrinsic_83['height'],
+    #     fx=intrinsic_83['fx'],
+    #     fy=intrinsic_83['fy'],
+    #     cx=intrinsic_83['ppx'],
+    #     cy=intrinsic_83['ppy'])
+    # rgbd_image_83 = o3d.geometry.RGBDImage.create_from_color_and_depth(
+    #     o3d.geometry.Image(color_image_83),
+    #     o3d.geometry.Image(depth_image_83),
+    #     depth_scale=1,  # Adjust based on your depth image scale
+    #     depth_trunc=1.5,  # Truncate depth values beyond this distance
+    #     convert_rgb_to_intensity=False)
 
-    transform_matrix_83_72 = np.array([[ 0.05702207, -0.4745224, 0.8783945, -1.067303],
-                                     [0.9192188, 0.3682892, 0.1392833, -0.4351598],
-                                     [ -0.3895963, 0.7994946, 0.4571905, 0.3163233],
-                                    [0, 0, 0, 1]], dtype=np.float32)
-    transform_matrix_83_72 = np.linalg.inv(transform_matrix_83_72)  # Invert the transformation matrix for the slave camera
+    # transform_matrix_83_72 = np.array([[-0.9798484, -0.1595772, -0.120134, -0.07619032],
+    #                                   [-0.01650491, -0.5347027, 0.8448791, -0.8207434],
+    #                                   [-0.1990594, 0.8298362, 0.5212938, 0.3569585],
+    #                                 [0, 0, 0, 1]], dtype=np.float32)
+    # transform_matrix_83_72 = np.linalg.inv(transform_matrix_83_72)  # Invert the transformation matrix for the slave camera
     
-    pcd_83 = o3d.geometry.PointCloud.create_from_rgbd_image(rgbd_image_83, 
-                                                            intrinsic_83,
-                                                            extrinsic=transform_matrix_83_72)
+    # pcd_83 = o3d.geometry.PointCloud.create_from_rgbd_image(rgbd_image_83, 
+    #                                                         intrinsic_83,
+    #                                                         extrinsic=transform_matrix_83_72)
     
 
     color_image_29 = cv2.imread(os.path.join('data', serial_numbers[0] + '_color.png'))
@@ -284,22 +280,22 @@ def view_combined_point_cloud():
         depth_scale=1,  # Adjust based on your depth image scale
         depth_trunc=1.5,  # Truncate depth values beyond this distance
         convert_rgb_to_intensity=False)
-    transform_matrix_29_83 = np.array([[ 0.05936317, -0.8555212, 0.5143535, -0.4373211],
-                                     [0.5357799, 0.4620624, 0.7067095, -0.5153366],
-                                     [-0.8422683, 0.2336278, 0.4858005, 0.8538319],
+    transform_matrix_29_83 = np.array([ [-0.9801651, -0.1587493, -0.1186386, -0.07690796],
+                                     [-0.01549144, -0.5354281, 0.8444387, -0.820531],
+                                     [-0.1975765, 0.8295272, 0.5223486, 0.3569262],
                                     [0, 0, 0, 1]], dtype=np.float32)
 
-    transform_matrix_29_83 = np.linalg.inv(transform_matrix_29_83) 
-    transform_29_72 = transform_matrix_29_83 @ transform_matrix_83_72
+    # transform_matrix_29_83 = np.linalg.inv(transform_matrix_29_83) 
+    # transform_29_72 = transform_matrix_29_83 @ transform_matrix_83_72
 
     pcd_29 = o3d.geometry.PointCloud.create_from_rgbd_image(rgbd_image_29, 
                                                                 intrinsic_29,
-                                                                extrinsic=transform_29_72)
+                                                                extrinsic=transform_matrix_29_83)
     
     o3d.io.write_point_cloud("pointclouds/pcd_72.ply", pcd_72)
-    o3d.io.write_point_cloud("pointclouds/pcd_83.ply", pcd_83)
+    # o3d.io.write_point_cloud("pointclouds/pcd_83.ply", pcd_83)
     o3d.io.write_point_cloud("pointclouds/pcd_29.ply", pcd_29)
-        # o3d.visualization.draw_geometries([pcd_master, pcd_slave])
+    # o3d.visualization.draw_geometries([pcd_72, pcd_29])
 
 def three_camera_pointcloud():
     color_image_72 = cv2.imread(os.path.join('data', serial_numbers[1] + '_color.png'))
@@ -417,5 +413,5 @@ def single_pcd(serial_number = serial_numbers[0]):
 
 
 # single_pcd()
-# view_combined_point_cloud()
-three_camera_pointcloud()
+view_combined_point_cloud()
+# three_camera_pointcloud()
