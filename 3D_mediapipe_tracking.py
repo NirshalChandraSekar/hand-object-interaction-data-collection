@@ -6,14 +6,14 @@ import open3d as o3d
 import pyrealsense2 as rs
 import os
 
-dataset_path = 'dataset/trial_dataset/check_video_data.h5'  # <- change this to your actual path if needed
+dataset_path = 'dataset/trial_dataset/2025-06-30T19:45:14.265848+00:00.h5'  # <- change this to your actual path if needed
 serial_numbers = ['213522250729', '213622251272']  # <- update these to your recorded camera serial numbers
 
-def media_on_single_frame(dataset_path, serial_number = serial_numbers[1], frame_index=0):
+def media_on_single_frame(dataset_path, serial_number, frame_index=0):
     mp_hands = mp.solutions.hands
     hands = mp_hands.Hands(static_image_mode=False, max_num_hands=2, min_detection_confidence=0.5)
     with h5py.File(dataset_path, 'r') as dataset:
-        color_image = dataset[serial_number]['color'][str(frame_index)][()]
+        color_image = dataset[f'{serial_number}/frames/color'][str(frame_index)][()]
         results = hands.process(cv2.cvtColor(color_image, cv2.COLOR_BGR2RGB))
         return results
 
@@ -21,7 +21,7 @@ def media_on_single_frame(dataset_path, serial_number = serial_numbers[1], frame
 '''
 Transformation matrix:
 
-[  -0.8387982, -0.3911612, 0.3786957, -0.2170857; 0.3091259, 0.2304021, 0.9226896, -0.6857208; -0.4481726, 0.891015, -0.07234281, 0.5222885 ; 0, 0, 0, 1 ]
+[ -0.9957571, 0.07216744, -0.0570933, -0.01410012; -0.07426238, -0.2638367, 0.9617044, -1.018328; 0.05434044, 0.9618639, 0.2680766, 0.6479367 ]
 '''
 def mediapipe_combined_pcd(dataset_path, serial_numbers = serial_numbers):
     with h5py.File(dataset_path, 'r') as dataset:
@@ -56,18 +56,19 @@ def mediapipe_combined_pcd(dataset_path, serial_numbers = serial_numbers):
         pcd_master = None
         pcd_slave = None
 
-        transform_matrix = np.array([[-0.8387982, -0.3911612, 0.3786957, -0.2170857],
-                                     [0.3091259, 0.2304021, 0.9226896, -0.6857208],
-                                     [-0.4481726, 0.891015, -0.07234281, 0.5222885],
+        transform_matrix = np.array([[-0.9957571, 0.07216744, -0.0570933, -0.01410012],
+                                     [-0.07426238, -0.2638367, 0.9617044, -1.018328],
+                                     [0.05434044, 0.9618639, 0.2680766, 0.6479367],
                                     [0, 0, 0, 1]], dtype=np.float32)
 
         transform_inv = np.linalg.inv(transform_matrix)  # Invert the transformation matrix for the slave camera
         
-        for frame_index in range(min(len(dataset[serial_master]['color'].keys()), len(dataset[serial_slave]['color'].keys()))):
-            color_image_master = dataset[serial_master]['color'][str(frame_index)][()]
+        for frame_index in range(min(len(dataset[f'{serial_number}/frames/color']) for serial_number in serial_numbers)):
+            
+            color_image_master = dataset[f'{serial_master}/frames/color'][str(frame_index)][()]
             color_image_master = cv2.cvtColor(color_image_master, cv2.COLOR_BGR2RGB)
             
-            depth_image_master = (dataset[serial_master]['depth'][str(frame_index)][()] * 0.001).astype(np.float32)
+            depth_image_master = dataset[f'{serial_master}/frames/depth'][str(frame_index)][()]
             
             rgbd_image_master = o3d.geometry.RGBDImage.create_from_color_and_depth(
                 o3d.geometry.Image(color_image_master),
@@ -80,10 +81,10 @@ def mediapipe_combined_pcd(dataset_path, serial_numbers = serial_numbers):
             new_pcd_master = o3d.geometry.PointCloud.create_from_rgbd_image(rgbd_image_master, 
                                                                     intrinsic_master)
             
-            color_image_slave = dataset[serial_slave]['color'][str(frame_index)][()]
-            color_image_slave = cv2.cvtColor(color_image_slave, cv2.COLOR_BGR2RGB)
+            color_image_slave = dataset[f'{serial_master}/frames/color'][str(frame_index)][()]
+            color_image_slave = cv2.cvtColor(color_image_master, cv2.COLOR_BGR2RGB)
             
-            depth_image_slave = (dataset[serial_slave]['depth'][str(frame_index)][()] * 0.001).astype(np.float32)
+            depth_image_slave = dataset[f'{serial_master}/frames/depth'][str(frame_index)][()]
             
             rgbd_image_slave = o3d.geometry.RGBDImage.create_from_color_and_depth(
                 o3d.geometry.Image(color_image_slave),

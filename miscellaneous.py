@@ -4,10 +4,11 @@ import numpy as np
 import mediapipe as mp
 import open3d as o3d
 import pyrealsense2 as rs
-import os
+import math
 
-dataset_path = 'dataset/trial_dataset/check_video_data.h5'  # <- change this to your actual path if needed
-serial_numbers = ['213522250729', '213622251272', '217222061083']  # <- update these to your recorded camera serial numbers
+dataset_path = 'dataset/trial_dataset/2025-06-30T19:36:12.501178+00:00.h5'  # <- change this to your actual path if needed
+# serial_numbers = ['213522250729', '213622251272', '217222061083']  # <- update these to your recorded camera serial numbers
+serial_numbers = ['213522250729', '213622251272']
 
 '''
 Camera 213622251272 Intrinsics:
@@ -30,7 +31,7 @@ Camera 213522250729 Intrinsics:
 
 def save_video_from_dataset(dataset_path, output_video_path, serial_numbers):
     with h5py.File(dataset_path, 'r') as dataset:
-        num_frames = len(dataset[serial_numbers[0]]['color'])
+        num_frames = min(len(dataset[f'{serial_number}/frames/color']) for serial_number in serial_numbers)
         frame_size = (640, 480)  # Assuming all images are 640x480
 
         # Define output dimensions based on layout (RGB and depth side by side for each camera)
@@ -48,8 +49,8 @@ def save_video_from_dataset(dataset_path, output_video_path, serial_numbers):
                 camera_row = []
                 
                 # Get color and depth images
-                color_image = dataset[serial]['color'][str(frame_idx)][()]
-                depth_image = dataset[serial]['depth'][str(frame_idx)][()]
+                color_image = dataset[f'{serial}/frames/color'][str(frame_idx)][()]
+                depth_image = dataset[f'{serial}/frames/depth'][str(frame_idx)][()]
 
                 # Normalize depth for visualization
                 depth_vis = cv2.convertScaleAbs(depth_image, alpha=0.03)
@@ -66,10 +67,6 @@ def save_video_from_dataset(dataset_path, output_video_path, serial_numbers):
             # Stack all camera rows vertically
             combined_frame = np.vstack(rows)
             out.write(combined_frame)
-            
-            # Optional: Display progress
-            if frame_idx % 100 == 0:
-                print(f"Processed {frame_idx}/{num_frames} frames")
 
         out.release()
         print(f"Video saved to {output_video_path}")
@@ -122,7 +119,8 @@ def run_mediapipe_on_videos(dataset_path, output_video_path, serial_numbers):
 
 def view_recorded_stream(dataset_path, serial_numbers):
     with h5py.File(dataset_path, 'r') as dataset:
-        num_frames = len(dataset[f'{serial_numbers[1]}/frames/color']['0'][()])
+        num_frames = min(len(dataset[f'{serial_number}/frames/color']) for serial_number in serial_numbers)
+
 
         for frame_idx in range(num_frames):
             for serial in serial_numbers:
@@ -413,5 +411,7 @@ def single_pcd(serial_number = serial_numbers[0]):
 
 
 # single_pcd()
-view_combined_point_cloud()
+# view_combined_point_cloud()
 # three_camera_pointcloud()
+# view_recorded_stream(dataset_path, serial_numbers)
+save_video_from_dataset('dataset/trial_dataset/2025-06-30T19:45:14.265848+00:00.h5', 'dataset/videos/output.mp4', serial_numbers)
