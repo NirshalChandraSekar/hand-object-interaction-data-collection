@@ -5,8 +5,9 @@ import mediapipe as mp
 import open3d as o3d
 import pyrealsense2 as rs
 import math
+import os
 
-dataset_path = 'dataset/trial_dataset/2025-06-30T19:36:12.501178+00:00.h5'  # <- change this to your actual path if needed
+dataset_path = 'dataset/trial_dataset/2025-07-01T21:26:31.528537+00:00.h5'  # <- change this to your actual path if needed
 # serial_numbers = ['213522250729', '213622251272', '217222061083']  # <- update these to your recorded camera serial numbers
 serial_numbers = ['213522250729', '213622251272']
 
@@ -206,8 +207,9 @@ def view_point_cloud_single_camera(dataset_path = 'dataset/trial_dataset/check_v
 
 '''
 Transformation matrix:
-
- [ -0.9801651, -0.1587493, -0.1186386, -0.07690796; -0.01549144, -0.5354281, 0.8444387, -0.820531; -0.1975765, 0.8295272, 0.5223486, 0.3569262 ]
+[-0.9867789, 0.06229286, -0.1496231, -0.0501312; 
+-0.1620499, -0.363834, 0.9172593, -0.9853306; 
+0.00270073, 0.9293785, 0.3691183, 0.6729895]
 '''
 
 def view_combined_point_cloud():
@@ -278,22 +280,22 @@ def view_combined_point_cloud():
         depth_scale=1,  # Adjust based on your depth image scale
         depth_trunc=1.5,  # Truncate depth values beyond this distance
         convert_rgb_to_intensity=False)
-    transform_matrix_29_83 = np.array([ [-0.9801651, -0.1587493, -0.1186386, -0.07690796],
-                                     [-0.01549144, -0.5354281, 0.8444387, -0.820531],
-                                     [-0.1975765, 0.8295272, 0.5223486, 0.3569262],
-                                    [0, 0, 0, 1]], dtype=np.float32)
+    transform_matrix = np.array([[-0.9872021, 0.06064954, -0.1474909, -0.05247459],
+                                       [-0.159466, -0.3662032, 0.9167692, -0.9855934],
+                                       [ 0.001589981, 0.9285563, 0.3711881, 0.6698481],
+                                       [0, 0, 0, 1]], dtype=np.float32)
 
-    # transform_matrix_29_83 = np.linalg.inv(transform_matrix_29_83) 
+    # transform_matrix = np.linalg.inv(transform_matrix) 
     # transform_29_72 = transform_matrix_29_83 @ transform_matrix_83_72
 
     pcd_29 = o3d.geometry.PointCloud.create_from_rgbd_image(rgbd_image_29, 
                                                                 intrinsic_29,
-                                                                extrinsic=transform_matrix_29_83)
+                                                                extrinsic=transform_matrix)
     
-    o3d.io.write_point_cloud("pointclouds/pcd_72.ply", pcd_72)
+    # o3d.io.write_point_cloud("pointclouds/pcd_72.ply", pcd_72)
     # o3d.io.write_point_cloud("pointclouds/pcd_83.ply", pcd_83)
-    o3d.io.write_point_cloud("pointclouds/pcd_29.ply", pcd_29)
-    # o3d.visualization.draw_geometries([pcd_72, pcd_29])
+    # o3d.io.write_point_cloud("pointclouds/pcd_29.ply", pcd_29)
+    o3d.visualization.draw_geometries([pcd_72, pcd_29])
 
 def three_camera_pointcloud():
     color_image_72 = cv2.imread(os.path.join('data', serial_numbers[1] + '_color.png'))
@@ -411,7 +413,7 @@ def single_pcd(serial_number = serial_numbers[0]):
 
 
 # single_pcd()
-# view_combined_point_cloud()
+view_combined_point_cloud()
 # three_camera_pointcloud()
 # view_recorded_stream(dataset_path, serial_numbers)
-save_video_from_dataset('dataset/trial_dataset/2025-06-30T19:45:14.265848+00:00.h5', 'dataset/videos/output.mp4', serial_numbers)
+# save_video_from_dataset('dataset/trial_dataset/2025-06-30T19:45:14.265848+00:00.h5', 'dataset/videos/output.mp4', serial_numbers)

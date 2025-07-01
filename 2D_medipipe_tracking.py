@@ -9,7 +9,7 @@ import os
 
 # import pyrealsense2 as rs
 
-dataset_path = 'dataset/trial_dataset/check_video_data.h5'  # <- change this to your actual path if needed
+dataset_path = 'dataset/trial_dataset/2025-06-30T19_45_14.265848+00_00.h5'  # <- change this to your actual path if needed
 serial_numbers = ['213522250729', '213622251272', '217222061083']  # <- update these to your recorded camera serial numbers
 
 def convert_depth_data_to_png(dataset_path = dataset_path, serial_numbers = serial_numbers, output_dir="dataset/trial_dataset/depth_pngs"):
@@ -48,28 +48,28 @@ def media_on_single_frame(dataset_path, serial_number = serial_numbers[1], frame
     mp_hands = mp.solutions.hands
     hands = mp_hands.Hands(static_image_mode=False, max_num_hands=2, min_detection_confidence=0.5)
     with h5py.File(dataset_path, 'r') as dataset:
-        color_image = dataset[serial_number]['color'][str(frame_index)][()]
+        color_image = dataset[f'{serial_number}/frames/color'][str(frame_index)][()]
         results = hands.process(cv2.cvtColor(color_image, cv2.COLOR_BGR2RGB))
         return results
 
 def pointcloud(dataset_path, serial_number = serial_numbers[0], frame_index=50, depth_dir="dataset/trial_dataset/depth_pngs"):
     with h5py.File(dataset_path, 'r') as dataset:
-        color_image = dataset[serial_number]['color'][str(frame_index)][()]
+        color_image = dataset[f'{serial_number}/frames/color'][str(frame_index)][()]
         color_image = cv2.cvtColor(color_image, cv2.COLOR_BGR2RGB)
-        # depth_image = (dataset[serial_number]['depth'][str(frame_index)][()] * 0.001).astype(np.float32)  # Convert depth to meters
+        depth_image = (dataset[f'{serial_number}/frames/depth'][str(frame_index)][()]).astype(np.float32) * 0.001 # Convert depth to meters
         
-        serial_input_dir = os.path.join(depth_dir, serial_number)
+        # serial_input_dir = os.path.join(depth_dir, serial_number)
 
-    with open(os.path.join(serial_input_dir, "depth_meta.json"), "r") as f:
-        meta = json.load(f) 
-    min_val, max_val = meta["min"], meta["max"]
+    # with open(os.path.join(serial_input_dir, "depth_meta.json"), "r") as f:
+    #     meta = json.load(f) 
+    # min_val, max_val = meta["min"], meta["max"]
 
-    frame_path = os.path.join(serial_input_dir, "50.png")
-    img = Image.open(frame_path)
-    depth = np.array(img)
+    # frame_path = os.path.join(serial_input_dir, "50.png")
+    # img = Image.open(frame_path)
+    # depth = np.array(img)
     
-    depth_image_scaled = depth / 65535.0 * (max_val - min_val) + min_val
-    depth_image = (depth_image_scaled * 0.001).astype(np.float32)
+    # depth_image_scaled = depth / 65535.0 * (max_val - min_val) + min_val
+    # depth_image = (depth_image_scaled * 0.001).astype(np.float32)
 
     intrinsics_ = np.load(f'data/{serial_number}_intrinsics.npy', allow_pickle=True).item()
     intrinsic = o3d.camera.PinholeCameraIntrinsic(
@@ -138,12 +138,12 @@ def pointcloud(dataset_path, serial_number = serial_numbers[0], frame_index=50, 
         sphere_origin = o3d.geometry.TriangleMesh.create_sphere(radius=0.01)
         sphere_origin.paint_uniform_color([0, 0, 0])  # Black
 
-        # o3d.visualization.draw_geometries([pcd, sphere, sphere_x, sphere_y, sphere_z, sphere_origin])  
-        o3d.io.write_point_cloud("pointclouds/pcd.ply", pcd)
-        o3d.io.write_triangle_mesh("pointclouds/sphere.ply", sphere)
+        o3d.visualization.draw_geometries([pcd, sphere, sphere_x, sphere_y, sphere_z, sphere_origin])  
+        # o3d.io.write_point_cloud("pointclouds/pcd.ply", pcd)
+        # o3d.io.write_triangle_mesh("pointclouds/sphere.ply", sphere)
     else:
-        #  o3d.visualization.draw_geometries([pcd])
-        o3d.io.write_point_cloud("pcd.ply", pcd_int)
+         o3d.visualization.draw_geometries([pcd])
+        # o3d.io.write_point_cloud("pcd.ply", pcd_int)
 
 
 def mediapipe_singleview_pcd(dataset_path, serial_number):
@@ -167,12 +167,12 @@ def mediapipe_singleview_pcd(dataset_path, serial_number):
         
         pcd = None
         
-        for frame_index in range(len(dataset[serial_number]['color'].keys())):
+        for frame_index in range(len(dataset[f'{serial_number}/frames/color'].keys())):
             
-            color_image = dataset[serial_number]['color'][str(frame_index)][()]
+            color_image = dataset[f'{serial_number}/frames/color'][str(frame_index)][()]
             color_image = cv2.cvtColor(color_image, cv2.COLOR_BGR2RGB)
             
-            depth_image = (dataset[serial_number]['depth'][str(frame_index)][()] * 0.001).astype(np.float32)
+            depth_image = (dataset[f'{serial_number}/frames/depth'][str(frame_index)][()] * 0.001).astype(np.float32)
             
             rgbd_image = o3d.geometry.RGBDImage.create_from_color_and_depth(
                 o3d.geometry.Image(color_image),
@@ -247,7 +247,7 @@ def mediapipe_singleview_pcd(dataset_path, serial_number):
 
 if __name__ == "__main__":
     # convert_depth_data_to_png()
-    pointcloud(dataset_path)
+    # pointcloud(dataset_path, frame_index=0, serial_number=serial_numbers[0])
     # Example usage
-    # for serial in serial_numbers:
-    #     mediapipe_singleview_pcd(dataset_path, serial)
+    for serial in serial_numbers:
+        mediapipe_singleview_pcd(dataset_path, serial)

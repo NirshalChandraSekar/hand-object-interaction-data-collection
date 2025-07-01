@@ -6,7 +6,7 @@ import open3d as o3d
 import pyrealsense2 as rs
 import os
 
-dataset_path = 'dataset/trial_dataset/2025-06-30T19:45:14.265848+00:00.h5'  # <- change this to your actual path if needed
+dataset_path = 'dataset/trial_dataset/2025-07-01T21:26:31.528537+00:00.h5'  # <- change this to your actual path if needed
 serial_numbers = ['213522250729', '213622251272']  # <- update these to your recorded camera serial numbers
 
 def media_on_single_frame(dataset_path, serial_number, frame_index=0):
@@ -21,8 +21,9 @@ def media_on_single_frame(dataset_path, serial_number, frame_index=0):
 '''
 Transformation matrix:
 
-[ -0.9957571, 0.07216744, -0.0570933, -0.01410012; -0.07426238, -0.2638367, 0.9617044, -1.018328; 0.05434044, 0.9618639, 0.2680766, 0.6479367 ]
+[ -0.9872021, 0.06064954, -0.1474909, -0.05247459; -0.159466, -0.3662032, 0.9167692, -0.9855934; 0.001589981, 0.9285563, 0.3711881, 0.6698481 ]
 '''
+
 def mediapipe_combined_pcd(dataset_path, serial_numbers = serial_numbers):
     with h5py.File(dataset_path, 'r') as dataset:
         serial_master = serial_numbers[0]
@@ -56,19 +57,17 @@ def mediapipe_combined_pcd(dataset_path, serial_numbers = serial_numbers):
         pcd_master = None
         pcd_slave = None
 
-        transform_matrix = np.array([[-0.9957571, 0.07216744, -0.0570933, -0.01410012],
-                                     [-0.07426238, -0.2638367, 0.9617044, -1.018328],
-                                     [0.05434044, 0.9618639, 0.2680766, 0.6479367],
-                                    [0, 0, 0, 1]], dtype=np.float32)
-
+        transform_matrix = np.array([[-0.9872021, 0.06064954, -0.1474909, -0.05247459],
+                                       [-0.159466, -0.3662032, 0.9167692, -0.9855934],
+                                       [ 0.001589981, 0.9285563, 0.3711881, 0.6698481],
+                                       [0, 0, 0, 1]], dtype=np.float32)
         transform_inv = np.linalg.inv(transform_matrix)  # Invert the transformation matrix for the slave camera
-        
-        for frame_index in range(min(len(dataset[f'{serial_number}/frames/color']) for serial_number in serial_numbers)):
-            
+        min_frame_count = min(len(list(dataset[f'{serial}/frames/color'])) for serial in serial_numbers)
+        for frame_index in range(min_frame_count):
             color_image_master = dataset[f'{serial_master}/frames/color'][str(frame_index)][()]
             color_image_master = cv2.cvtColor(color_image_master, cv2.COLOR_BGR2RGB)
             
-            depth_image_master = dataset[f'{serial_master}/frames/depth'][str(frame_index)][()]
+            depth_image_master = (dataset[f'{serial_master}/frames/depth'][str(frame_index)][()] * 0.001).astype(np.float32)
             
             rgbd_image_master = o3d.geometry.RGBDImage.create_from_color_and_depth(
                 o3d.geometry.Image(color_image_master),
@@ -81,10 +80,10 @@ def mediapipe_combined_pcd(dataset_path, serial_numbers = serial_numbers):
             new_pcd_master = o3d.geometry.PointCloud.create_from_rgbd_image(rgbd_image_master, 
                                                                     intrinsic_master)
             
-            color_image_slave = dataset[f'{serial_master}/frames/color'][str(frame_index)][()]
-            color_image_slave = cv2.cvtColor(color_image_master, cv2.COLOR_BGR2RGB)
+            color_image_slave = dataset[f'{serial_slave}/frames/color'][str(frame_index)][()]
+            color_image_slave = cv2.cvtColor(color_image_slave, cv2.COLOR_BGR2RGB)
             
-            depth_image_slave = dataset[f'{serial_master}/frames/depth'][str(frame_index)][()]
+            depth_image_slave = (dataset[f'{serial_slave}/frames/depth'][str(frame_index)][()] * 0.001).astype(np.float32)
             
             rgbd_image_slave = o3d.geometry.RGBDImage.create_from_color_and_depth(
                 o3d.geometry.Image(color_image_slave),
@@ -96,7 +95,7 @@ def mediapipe_combined_pcd(dataset_path, serial_numbers = serial_numbers):
             
             new_pcd_slave = o3d.geometry.PointCloud.create_from_rgbd_image(rgbd_image_slave, 
                                                                     intrinsic_slave,
-                                                                    extrinsic=transform_matrix)
+                                                                    extrinsic=transform_inv)
             
             media_results_master = media_on_single_frame(dataset_path, serial_master, frame_index)
             media_results_slave = media_on_single_frame(dataset_path, serial_slave, frame_index)
