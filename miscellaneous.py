@@ -41,36 +41,26 @@ def save_video_from_dataset(dataset_path, output_video_path, serial_numbers):
 
         for frame_idx in range(num_frames):
             rows = []
-
             for serial in serial_numbers:
-                try:
-                    # Load color and depth images
-                    color_image = dataset[f'{serial}/frames/color'][str(frame_idx)][()]
-                    depth_image = dataset[f'{serial}/frames/depth'][str(frame_idx)][()]
+                # Load color and depth images
+                color_image = dataset[f'{serial}/frames/color'][str(frame_idx)][()]
+                depth_image = dataset[f'{serial}/frames/depth'][str(frame_idx)][()]
 
-                    # Get timestamp
-                    timestamp = dataset[f'{serial}/frames/timestamps'][frame_idx]
-                    timestamp_text = f"{serial} | Time: {timestamp:.2f} ms"
+                # Get timestamp
+                timestamp = dataset[f'{serial}/frames/timestamps'][frame_idx]
+                timestamp_text = f"{serial} | Time: {timestamp:.2f} ms"
 
-                    # Normalize and colorize depth
-                    depth_vis = cv2.convertScaleAbs(depth_image, alpha=0.03)
-                    depth_colored = cv2.applyColorMap(depth_vis, cv2.COLORMAP_JET)
+                # Normalize and colorize depth
+                depth_vis = cv2.convertScaleAbs(depth_image, alpha=0.03)
+                depth_colored = cv2.applyColorMap(depth_vis, cv2.COLORMAP_JET)
 
-                    # Resize
-                    color_image_resized = cv2.resize(color_image, frame_size)
-                    depth_colored_resized = cv2.resize(depth_colored, frame_size)
+                # Add timestamp to color image
+                cv2.putText(color_image, timestamp_text, (10, 30),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
 
-                    # Add timestamp to color image
-                    cv2.putText(color_image_resized, timestamp_text, (10, 30),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
-
-                    # Concatenate
-                    camera_row = np.hstack([color_image_resized, depth_colored_resized])
-                    rows.append(camera_row)
-
-                except Exception as e:
-                    print(f"Error on frame {frame_idx}, camera {serial}: {e}")
-                    continue
+                # Concatenate
+                camera_row = np.hstack([color_image, depth_colored])
+                rows.append(camera_row)
 
             if rows:
                 combined_frame = np.vstack(rows)
