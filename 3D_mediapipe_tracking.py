@@ -198,4 +198,4 @@ def mediapipe_combined_pcd(dataset_path, serial_numbers = serial_numbers):
     vis.destroy_window()
 
 if __name__ == "__main__":
-    mediapipe_combined_pcd(dataset_path)
+    mediapipe_combined_pcd('dataset/demo_data/2025-07-02T19:28:16.042706+00:00.h5')

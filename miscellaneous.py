@@ -28,46 +28,53 @@ Camera 213522250729 Intrinsics:
   Distortion Coefficients: [0.0, 0.0, 0.0, 0.0, 0.0]
 '''
 
-# serial_numbers = ['213622251272', '213522250729']  # <- update these to your recorded camera serial numbers
-
 def save_video_from_dataset(dataset_path, output_video_path, serial_numbers):
     with h5py.File(dataset_path, 'r') as dataset:
-        num_frames = min(len(dataset[f'{serial_number}/frames/color']) for serial_number in serial_numbers)
-        frame_size = (640, 480)  # Assuming all images are 640x480
+        num_frames = min(len(dataset[f'{serial}/frames/color']) for serial in serial_numbers)
+        frame_size = (640, 480)  # Width x Height
 
-        # Define output dimensions based on layout (RGB and depth side by side for each camera)
-        output_width = frame_size[0] * 2  # Two columns (RGB + depth)
-        output_height = frame_size[1] * len(serial_numbers)  # Rows = number of cameras
+        output_width = frame_size[0] * 2  # RGB + Depth
+        output_height = frame_size[1] * len(serial_numbers)  # One row per camera
 
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         out = cv2.VideoWriter(output_video_path, fourcc, 30.0, (output_width, output_height))
 
         for frame_idx in range(num_frames):
             rows = []
-            
-            # Process each camera
+
             for serial in serial_numbers:
-                camera_row = []
-                
-                # Get color and depth images
-                color_image = dataset[f'{serial}/frames/color'][str(frame_idx)][()]
-                depth_image = dataset[f'{serial}/frames/depth'][str(frame_idx)][()]
+                try:
+                    # Load color and depth images
+                    color_image = dataset[f'{serial}/frames/color'][str(frame_idx)][()]
+                    depth_image = dataset[f'{serial}/frames/depth'][str(frame_idx)][()]
 
-                # Normalize depth for visualization
-                depth_vis = cv2.convertScaleAbs(depth_image, alpha=0.03)
-                depth_colored = cv2.applyColorMap(depth_vis, cv2.COLORMAP_JET)
+                    # Get timestamp
+                    timestamp = dataset[f'{serial}/frames/timestamps'][frame_idx]
+                    timestamp_text = f"{serial} | Time: {timestamp:.2f} ms"
 
-                # Resize images to ensure they fit in the frame
-                color_image_resized = cv2.resize(color_image, frame_size)
-                depth_colored_resized = cv2.resize(depth_colored, frame_size)
+                    # Normalize and colorize depth
+                    depth_vis = cv2.convertScaleAbs(depth_image, alpha=0.03)
+                    depth_colored = cv2.applyColorMap(depth_vis, cv2.COLORMAP_JET)
 
-                # Create a row with RGB and depth side by side
-                camera_row = np.hstack([color_image_resized, depth_colored_resized])
-                rows.append(camera_row)
-            
-            # Stack all camera rows vertically
-            combined_frame = np.vstack(rows)
-            out.write(combined_frame)
+                    # Resize
+                    color_image_resized = cv2.resize(color_image, frame_size)
+                    depth_colored_resized = cv2.resize(depth_colored, frame_size)
+
+                    # Add timestamp to color image
+                    cv2.putText(color_image_resized, timestamp_text, (10, 30),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
+
+                    # Concatenate
+                    camera_row = np.hstack([color_image_resized, depth_colored_resized])
+                    rows.append(camera_row)
+
+                except Exception as e:
+                    print(f"Error on frame {frame_idx}, camera {serial}: {e}")
+                    continue
+
+            if rows:
+                combined_frame = np.vstack(rows)
+                out.write(combined_frame)
 
         out.release()
         print(f"Video saved to {output_video_path}")
@@ -413,7 +420,7 @@ def single_pcd(serial_number = serial_numbers[0]):
 
 
 # single_pcd()
-view_combined_point_cloud()
+# view_combined_point_cloud()
 # three_camera_pointcloud()
-# view_recorded_stream(dataset_path, serial_numbers)
-# save_video_from_dataset('dataset/trial_dataset/2025-06-30T19:45:14.265848+00:00.h5', 'dataset/videos/output.mp4', serial_numbers)
+# view_recorded_stream('dataset/demo_data/2025-07-02T19:28:16.042706+00:00.h5', serial_numbers)
+save_video_from_dataset('dataset/demo_data/2025-07-02T19:28:16.042706+00:00.h5', 'videos/out.mp4', serial_numbers)
