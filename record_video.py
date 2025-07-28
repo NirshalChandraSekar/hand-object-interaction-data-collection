@@ -90,7 +90,7 @@ class Camera:
             align = rs.align(rs.stream.color)
 
             start_time = datetime.now(timezone.utc).isoformat()
-            output_file = f"dataset/trial_dataset/{start_time}.h5"
+            output_file = f"dataset/{start_time}.h5"
             print(f"[INFO] Saving to: {output_file}")
 
             try:
