@@ -1,0 +1,296 @@
+# import pyrealsense2 as rs
+import numpy as np
+import cv2
+import os
+import h5py
+
+
+class CalibrateCameras:
+    def __init__(self):
+        # self.context = rs.context()
+        # self.devices = self.context.query_devices()
+        # self.device_count = len(self.devices)
+
+        # if self.device_count == 0:
+        #     print("No RealSense cameras detected.")
+        #     return
+
+        return
+
+    def save_frames_for_calibration(self, save_path="cameras/calibration_images", num_frames=10):
+        os.makedirs(save_path, exist_ok=True)
+
+        for frame_num in range(num_frames):
+            for i, device in enumerate(self.devices):
+                serial = device.get_info(rs.camera_info.serial_number)
+                stream_path = os.path.join(save_path, str(frame_num))
+                os.makedirs(stream_path, exist_ok=True)
+                print(f"Saving frame {frame_num} from Camera", i + 1)
+
+                pipeline = rs.pipeline()
+                config = rs.config()
+                config.enable_device(serial)
+                config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
+                config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
+                profile = pipeline.start(config)
+
+                intrinsics = profile.get_stream(rs.stream.color).as_video_stream_profile().get_intrinsics()
+                intrinsic_matrix = [
+                    [intrinsics.fx, 0, intrinsics.ppx],
+                    [0, intrinsics.fy, intrinsics.ppy],
+                    [0, 0, 1]
+                ]
+                distortion_coeff = intrinsics.coeffs
+
+                np.save(os.path.join(stream_path, f"{serial}_intrinsic_matrix.npy"), intrinsic_matrix)
+                np.save(os.path.join(stream_path, f"{serial}_distortion_coeff.npy"), distortion_coeff)
+
+                frameset = pipeline.wait_for_frames()
+                align = rs.align(rs.stream.color)
+                aligned_frames = align.process(frameset)
+                color_frame = aligned_frames.get_color_frame()
+                depth_frame = aligned_frames.get_depth_frame()
+
+                color_image = np.asanyarray(color_frame.get_data())
+                depth_image = np.asanyarray(depth_frame.get_data())
+
+                cv2.imwrite(os.path.join(stream_path, f"{serial}_color.png"), color_image)
+                np.save(os.path.join(stream_path, f"{serial}_depth.npy"), depth_image)
+
+                pipeline.stop()
+                config.disable_all_streams()
+            _ = input("Press Enter to continue...")
+
+    def detect_charuco_corners(self, image, board, aruco_dict, aruco_params):
+
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    #     corners, ids, _ = cv2.aruco.detectMarkers(gray, aruco_dict, parameters=aruco_params)
+    #     if ids is not None:
+    #         retval, charuco_corners, charuco_ids = cv2.aruco.interpolateCornersCharuco(
+    #             corners, ids, gray, board
+    #         )
+    #         if retval and len(charuco_corners) >= 4:
+    #             return charuco_corners, charuco_ids
+    #     return None, None
+
+
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        corners, ids, _ = cv2.aruco.detectMarkers(gray, aruco_dict, parameters=aruco_params)
+
+        img_markers = image.copy()
+
+        # DEBUG #
+        if ids is not None:
+            print(f"Found {len(ids)} ids")
+            cv2.aruco.drawDetectedMarkers(img_markers, corners, ids)
+
+            retval, charuco_corners, charuco_ids = cv2.aruco.interpolateCornersCharuco(
+                corners, ids, gray, board
+            )
+
+            print("Interpolate result:", retval)
+            if charuco_corners is not None:
+                print(f"Success — Found {len(charuco_corners)} corners")
+                cv2.aruco.drawDetectedCornersCharuco(img_markers, charuco_corners, charuco_ids)
+                cv2.imshow("Success", img_markers)
+                cv2.waitKey(0)
+                return charuco_corners, charuco_ids
+
+        print("Failed Detection")
+        cv2.imshow("Failed detection", img_markers)
+        cv2.waitKey(0)
+        return None, None
+
+    # def detect_charuco_corners(self, image, board, aruco_dict, aruco_params):
+    #     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    #     corners, ids, _ = cv2.aruco.detectMarkers(gray, aruco_dict, parameters=aruco_params)
+    #     if ids is not None:
+    #         retval, charuco_corners, charuco_ids = cv2.aruco.interpolateCornersCharuco(
+    #             corners, ids, gray, board
+    #         )
+    #         if retval and len(charuco_corners) >= 4:
+    #             return charuco_corners, charuco_ids
+    #     return None, None
+
+    def estimate_camera_pose(self, charuco_corners, charuco_ids, board, intrinsics_matrix, distortion_coeffs):
+        """Estimate camera pose using a Charuco Board."""
+        rvec = np.zeros((1, 3), dtype=np.float64)
+        tvec = np.zeros((1, 3), dtype=np.float64)
+        success, rvec, tvec = cv2.aruco.estimatePoseCharucoBoard(
+            charuco_corners, charuco_ids, board, intrinsics_matrix, distortion_coeffs, rvec, tvec
+        )
+        if success:
+            return rvec, tvec
+        else:
+            print("Pose estimation failed.")
+            return None, None
+
+    def compute_extrinsics(self, rvec1, tvec1, rvec2, tvec2):
+        R1, _ = cv2.Rodrigues(rvec1)
+        R2, _ = cv2.Rodrigues(rvec2)
+        R = R2 @ R1.T
+        T = tvec2 - R @ tvec1
+        extrinsic = np.eye(4)
+        extrinsic[:3, :3] = R
+        extrinsic[:3, 3] = T.flatten()
+        return extrinsic
+
+    def backproject(self, depth, intrinsics):
+        h, w = depth.shape
+        i, j = np.meshgrid(np.arange(w), np.arange(h), indexing='xy')
+        z = depth.astype(np.float32)
+        x = (i - intrinsics[0][2]) * z / intrinsics[0][0]
+        y = (j - intrinsics[1][2]) * z / intrinsics[1][1]
+        return np.stack((x, y, z), axis=-1)
+
+    def transform_points(self, points, t_matrix):
+        h, w, _ = points.shape
+        flat = points.reshape(-1, 3)
+        ones = np.ones((flat.shape[0], 1))
+        hom = np.hstack((flat, ones))
+        transformed = (t_matrix @ hom.T).T
+        return transformed[:, :3].reshape(h, w, 3)
+
+    def evaluate_extrinsic_matrix(self, extrinsic_matrix, depth_cam1, depth_cam2, intrinsics_cam1, intrinsics_cam2):
+        # Backproject depth images to 3D points
+        points_cam1 = self.backproject(depth_cam1, intrinsics_cam1)  # (H, W, 3)
+        points_cam2 = self.backproject(depth_cam2, intrinsics_cam2)  # (H, W, 3)
+
+        # Transform points from camera 1's frame to camera 2's frame
+        points_cam1_transformed = self.transform_points(points_cam1, extrinsic_matrix)
+
+        # Create mask for valid points in both cameras
+        valid_mask = (depth_cam1 > 0) & (depth_cam2 > 0) & (points_cam1_transformed[:, :, 2] > 0)
+
+        if np.count_nonzero(valid_mask) == 0:
+            return float('inf')  # no valid points to compare
+
+        # Calculate Euclidean distance errors between transformed cam1 points and cam2 points
+        errors = np.linalg.norm(points_cam1_transformed[valid_mask] - points_cam2[valid_mask], axis=1)
+
+        # Return mean error
+        return errors.mean()
+
+
+    def calibrate_cameras(self, camera_serials, dataset_path="/Users/pearljain/Projects/hand-object-interaction-data-collection/dataset/2025-07-15T17_01_05.631936+00_00.h5"):
+        if camera_serials is None:
+            return None
+
+        # Create ChArUco board for calibration
+        aruco_dict_id = cv2.aruco.DICT_4X4_50
+        aruco_dict = cv2.aruco.getPredefinedDictionary(aruco_dict_id)
+        squares_verticle = 8
+        squares_horizontal = 6
+        # square_length = 0.078  # meters
+        # marker_length = 0.069  # meters
+
+        square_length = 0.029  # meters
+        marker_length = 0.022  # meters
+        
+        board = cv2.aruco.CharucoBoard(
+            (squares_horizontal, squares_verticle),
+            square_length,
+            marker_length,
+            aruco_dict
+        )
+        
+        aruco_params = cv2.aruco.DetectorParameters()
+    
+        
+        # Get all frames for calibration
+        frames_data = {}
+        with h5py.File(dataset_path, 'r') as dataset:
+            num_frames = min(len(dataset[f'{serial_number}/frames/color']) for serial_number in camera_serials)
+            for frame_idx in range(num_frames):
+                for serial in camera_serials:
+                    if serial not in frames_data:
+                        frames_data[serial] = {
+                            'color_images': [],
+                            'depth_images': [],
+                            'intrinsics': None,
+                            'distortion': None
+                        }
+                    
+                    color_image = dataset[f'{serial}/frames/color'][str(frame_idx)][()]
+                    frames_data[serial]['color_images'].append(color_image)
+                    
+                    depth_image = dataset[f'{serial}/frames/depth'][str(frame_idx)][()]
+                    frames_data[serial]['depth_images'].append(depth_image)
+
+                    # Load intrinsics if not already loaded
+                    if frames_data[serial]['intrinsics'] is None:
+                        intrinsics = dataset[f'{serial}/params/intrinsics']
+                        intrinsic_matrix = np.eye(3)
+                        intrinsic_matrix[0,0] = intrinsics['fx'][()]
+                        intrinsic_matrix[1,1] = intrinsics['fy'][()]
+                        intrinsic_matrix[0,2] = intrinsics['ppx'][()]
+                        intrinsic_matrix[1,2] = intrinsics['ppy'][()]
+                        frames_data[serial]['intrinsics'] = intrinsic_matrix
+                    
+                    # Load distortion coefficients if not already loaded
+                    if frames_data[serial]['distortion'] is None:
+                        frames_data[serial]['distortion'] = dataset[f'{serial}/params/intrinsics/coeffs'][()]
+
+                        
+            # Calculate transformation matrices between cameras
+            cam1 = camera_serials[0]
+            cam2 = camera_serials[1]
+            
+            # Check if we have data for both cameras
+            if cam1 not in frames_data or cam2 not in frames_data:
+                print(f"Missing data for one or both cameras: {cam1}, {cam2}")
+                return None
+
+            best_matrix = None
+            lowest_error = float('inf')
+
+            for i in range(num_frames):
+                img1, img2 = frames_data[cam1]['color_images'][i], frames_data[cam2]['color_images'][i]
+                corners1, ids1 = self.detect_charuco_corners(img1, board, aruco_dict, aruco_params)
+                corners2, ids2 = self.detect_charuco_corners(img2, board, aruco_dict, aruco_params)
+                if corners1 is None or corners2 is None: 
+                    print("No corners or ids")
+                    continue
+
+                rvec1, tvec1 = self.estimate_camera_pose(corners1, ids1, board, frames_data[cam1]['intrinsics'], frames_data[cam1]['distortion'])
+                rvec2, tvec2 = self.estimate_camera_pose(corners2, ids2, board, frames_data[cam2]['intrinsics'], frames_data[cam2]['distortion'])
+                if rvec1 is None or rvec2 is None: 
+                    print("No rvecs or tvecs")
+                    continue
+
+                matrix = self.compute_extrinsics(rvec1, tvec1, rvec2, tvec2)
+                print(matrix)
+
+                depth1 = frames_data[cam1]['depth_images'][i]
+                depth2 = frames_data[cam2]['depth_images'][i]
+
+                # Assuming you already computed extrinsic_matrix for this frame...
+                error = self.evaluate_extrinsic_matrix(
+                    matrix,
+                    depth1,
+                    depth2,
+                    frames_data[cam1]['intrinsics'],
+                    frames_data[cam2]['intrinsics']
+                )
+                print(error)
+                if error < lowest_error:
+                    lowest_error = error
+                    best_matrix = matrix
+
+            if best_matrix is not None:
+                print(f"\n Best transformation (avg error = {lowest_error:.5f}):")
+                for row in best_matrix:
+                    print("  [" + ", ".join(f"{x:.6f}" for x in row) + "],")
+
+                out_path = "cameras/camera_transforms"
+                os.makedirs(out_path, exist_ok=True)
+                np.save(os.path.join(out_path, f"{camera_serials[0]}_{camera_serials[1]}_transform.npy"), best_matrix)
+                return best_matrix
+            else:
+                print("Failed to find a valid calibration transformation.")
+                return None
+
+if __name__ == '__main__':
+
+    calib = CalibrateCameras()
+    calib.calibrate_cameras(['213522250729', '037522250789'])

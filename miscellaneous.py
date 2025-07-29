@@ -413,4 +413,4 @@ def single_pcd(serial_number = serial_numbers[0]):
 # view_combined_point_cloud()
 # three_camera_pointcloud()
 # view_recorded_stream('dataset/demo_data/2025-07-02T19:28:16.042706+00:00.h5', serial_numbers)
-save_video_from_dataset('dataset/demo_data/2025-07-02T19:28:16.042706+00:00.h5', 'videos/out.mp4', serial_numbers)
+save_video_from_dataset('dataset/2025-07-14T17_56_55.889207+00_00.h5', 'out.mp4', serial_numbers)
