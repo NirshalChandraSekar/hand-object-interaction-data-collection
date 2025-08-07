@@ -16,7 +16,11 @@ exit_requested = False
 
 
 class AudioRecorder:
-    def __init__(self, output_file, rate=44100, channels=1, chunk=1024):
+    """
+    Handles audio recording using PyAudio in a separate thread.
+    Records audio data and saves to a WAV file.
+    """
+    def __init__(self, output_file, rate=48000, channels=2, chunk=4096):
         self.output_file = output_file
         self.rate = rate
         self.channels = channels
@@ -27,6 +31,12 @@ class AudioRecorder:
         self.audio_start_time = None
 
     def record(self, start_time):
+        """
+        Start recording audio until stop_event is set.
+        
+        Args:
+            start_time (float): The global recording start timestamp, used for synchronization.
+        """
         self.frames = []
         self.stop_event.clear()
         self.audio_start_time = datetime.now(timezone.utc).timestamp() - start_time
@@ -40,7 +50,7 @@ class AudioRecorder:
 
         print("[AUDIO] Recording started.")
         while not self.stop_event.is_set():
-            data = stream.read(self.chunk)
+            data = stream.read(self.chunk, exception_on_overflow=False)
             self.frames.append(data)
 
         stream.stop_stream()
@@ -57,21 +67,34 @@ class AudioRecorder:
 
 
 class Camera:
+    """
+    Manages RealSense camera interactions: device queries, intrinsics, and video recording.
+    """
     def __init__(self):
         self.ctx = rs.context()
 
     def check_available_cameras(self):
+        """
+        Manages RealSense camera interactions: device queries, intrinsics, and video recording.
+        """
         devices = self.ctx.query_devices()
         if len(devices) == 0:
             print("No RealSense cameras found.")
-            return False
         else:
             print("Available RealSense cameras:")
             for device in devices:
                 print(f"  - {device.get_info(rs.camera_info.name)} (Serial: {device.get_info(rs.camera_info.serial_number)})")
-            return True
 
     def get_camera_intrinsics(self, pipeline):
+        """
+        Retrieves intrinsics from the color stream of the given pipeline.
+        
+        Args:
+            pipeline (rs.pipeline): Started RealSense pipeline.
+
+        Returns:
+            rs.intrinsics: Camera intrinsics object.
+        """
         frames = pipeline.wait_for_frames()
         color_frame = frames.get_color_frame()
         profile = color_frame.get_profile().as_video_stream_profile()
@@ -79,6 +102,15 @@ class Camera:
         return intr
 
     def record_video_streams(self, serial_numbers=None, stop_flag=lambda: False):
+        """
+        Records synchronized color and depth streams from specified RealSense cameras,
+        storing frames and timestamps in an HDF5 file. Also records audio in parallel.
+
+        Args:
+            serial_numbers (List[str], optional): List of serial numbers to record from.
+                If None, records from all connected devices.
+            stop_flag (callable): Function returning True to stop recording.
+        """
         if serial_numbers is None:
             serial_numbers = [device.get_info(rs.camera_info.serial_number) for device in self.ctx.query_devices()]
             if len(serial_numbers) < 1:
@@ -89,11 +121,12 @@ class Camera:
         align = rs.align(rs.stream.color)
 
         start_time = datetime.now(timezone.utc).isoformat()
+
         output_dir = "dataset"
         os.makedirs(output_dir, exist_ok=True)
 
-        output_file = f"{output_dir}/{start_time}.h5"
-        audio_output_file = f"{output_dir}/{start_time}_audio.wav"
+        output_file = f"{output_dir}/video/{start_time}.h5"
+        audio_output_file = f"{output_dir}/audio/{start_time}.wav"
 
         print(f"[INFO] Saving video to: {output_file}")
         print(f"[INFO] Saving audio to: {audio_output_file}")
@@ -111,8 +144,8 @@ class Camera:
                     pipeline = rs.pipeline()
                     config = rs.config()
                     config.enable_device(serial)
-                    config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
-                    config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
+                    config.enable_stream(rs.stream.color, 1280, 720, rs.format.bgr8, 30)
+                    config.enable_stream(rs.stream.depth, 1280, 720, rs.format.z16, 30)
                     pipeline.start(config)
                     pipelines.append(pipeline)
 
@@ -126,12 +159,14 @@ class Camera:
                     intr_group.create_dataset("fy", data=intr.fy)
                     intr_group.create_dataset("model", data=str(intr.model))
                     intr_group.create_dataset("coeffs", data=intr.coeffs)
+                    
                     params_group[serial].create_dataset("start_time", data=start_time, dtype=h5py.string_dtype(encoding='utf-8'))
 
                 print("Recording started. Press 'r' again to stop.")
                 recording_start = datetime.now(timezone.utc).timestamp()
 
                 # Start audio thread
+                # Comment this out when you don't need it
                 audio_recorder = AudioRecorder(audio_output_file)
                 audio_thread = threading.Thread(target=audio_recorder.record, args=(recording_start,))
                 audio_thread.start()
@@ -175,6 +210,9 @@ class Camera:
 
 
 def listen_for_keys():
+    """
+    Listens for keyboard inputs ('r' to start/stop recording, 'q' to quit) in a separate thread.
+    """
     def on_press(key):
         global recording, stop_requested, exit_requested
         if hasattr(key, 'char'):
@@ -194,11 +232,13 @@ def listen_for_keys():
     with keyboard.Listener(on_press=on_press) as listener:
         listener.join()
 
-
-if __name__ == "__main__":
+def record_audio_video():
+    """
+    Main entry point to start recording video and audio streams based on keyboard input.
+    Starts listener thread to handle 'r' and 'q' keys.
+    """
     camera = Camera()
-    if  (camera.check_available_cameras()):
-        return
+    camera.check_available_cameras()
 
     listener_thread = threading.Thread(target=listen_for_keys, daemon=True)
     listener_thread.start()
@@ -213,6 +253,110 @@ if __name__ == "__main__":
         time.sleep(0.1)
 
     print("[INFO] Program exited.")
+
+
+def view_live_camera_streams(serial_numbers=[device.get_info(rs.camera_info.serial_number) for device in rs.context().query_devices()]):
+    """
+    Displays live color and aligned depth streams from specified RealSense cameras in OpenCV windows.
+    
+    Args:
+        serial_numbers (List[str]): List of serial numbers to display streams for.
+    """
+    pipelines = []
+    for serial in serial_numbers:
+        pipeline = rs.pipeline()
+        config = rs.config()
+        config.enable_device(serial)
+        config.enable_stream(rs.stream.color, 1280, 720, rs.format.bgr8, 30)
+        config.enable_stream(rs.stream.depth, 1280, 720, rs.format.z16, 30)
+        pipeline.start(config)
+        pipelines.append(pipeline)
+    
+    try:
+        while True:
+            # Process each camera
+            for i, pipeline in enumerate(pipelines):
+                frames = pipeline.wait_for_frames()
+                color_frame = frames.get_color_frame()
+                depth_frame = frames.get_depth_frame()
+                
+                if not color_frame or not depth_frame:
+                    continue
+                    
+                color_image = np.asanyarray(color_frame.get_data())
+                
+                # Align depth to color
+                aligned_depth_frame = rs.align(rs.stream.color).process(frames).get_depth_frame()
+                aligned_depth_image = np.asanyarray(aligned_depth_frame.get_data())
+                
+                # Show camera-specific windows
+                cv2.imshow(f'Color Stream {serial_numbers[i]}', color_image)
+                cv2.imshow(f'Aligned Depth Stream {serial_numbers[i]}', aligned_depth_image)
+            
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+    finally:
+        for pipeline in pipelines:
+            pipeline.stop()
+        cv2.destroyAllWindows()
+
+def save_images():
+   """
+    Captures and saves single color and depth frames from all connected RealSense cameras.
+    Saves images and intrinsics data into the 'data' directory.
+    """
+   ctx = rs.context()
+   devices = ctx.query_devices()
+   os.makedirs('data', exist_ok=True)
+
+   for device in devices:
+       if device.supports(rs.camera_info.serial_number):
+           serial_number = device.get_info(rs.camera_info.serial_number)
+           pipeline = rs.pipeline()
+           config = rs.config()
+           config.enable_device(serial_number)
+           config.enable_stream(rs.stream.color, 1280, 720, rs.format.bgr8, 30)
+           config.enable_stream(rs.stream.depth, 1280, 720, rs.format.z16, 30)
+           pipeline.start(config)
+
+           align = rs.align(rs.stream.color)
+           try:
+               frames = pipeline.wait_for_frames()
+               aligned_frames = align.process(frames)
+               # Get aligned color and depth frames
+               color_frame = aligned_frames.get_color_frame()
+               depth_frame = aligned_frames.get_depth_frame()
+
+               if not color_frame or not depth_frame:
+                   print(f"Frames not captured for device {serial_number}")
+                   continue
+
+               # Convert images to numpy arrays
+               color_image = np.asanyarray(color_frame.get_data())
+               depth_image = np.asanyarray(depth_frame.get_data())
+
+               # Save images with serial number as filename
+               cv2.imwrite(f'data/{serial_number}_color.png', color_image)
+               np.save(f'data/{serial_number}_depth.npy', depth_image)
+
+               intrinsics = color_frame.profile.as_video_stream_profile().intrinsics
+               # Save intrinsic parameters
+               intrinsics_data = {
+                   'width': intrinsics.width,
+                   'height': intrinsics.height,
+                   'ppx': intrinsics.ppx,
+                   'ppy': intrinsics.ppy,
+                   'fx': intrinsics.fx,
+                   'fy': intrinsics.fy,
+                   'model': intrinsics.model,
+                   'coeffs': intrinsics.coeffs
+               }
+               np.save(f'data/{serial_number}_intrinsics.npy', intrinsics_data)
+
+
+           finally:
+               # Stop the pipeline
+               pipeline.stop()    
 
 # Translate Later
 # audio_start_absolute = start_time + audio_start_time  # global clock
