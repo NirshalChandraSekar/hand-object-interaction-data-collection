@@ -194,7 +194,7 @@ def view_combined_pcd(serial_nums, t_matrices, dataset_path='data'):
     pcds = []
     aggregated_transformation = np.eye(4)
 
-    for i, serial_num in enumerate(serial_nums):
+    for i, serial_num in serial_nums.items():
         # Load color and depth images
         color_image = cv2.imread(os.path.join(dataset_path, f'{serial_num}_color.png'))
         color_image = cv2.cvtColor(color_image, cv2.COLOR_BGR2RGB)
@@ -232,11 +232,8 @@ def view_combined_pcd(serial_nums, t_matrices, dataset_path='data'):
         if i < len(serial_nums) - 1:
             master = serial_nums[i]
             slave = serial_nums[i + 1]
-            aggregated_transformation = np.dot(aggregated_transformation, t_matrices[(master, slave)])
-        
+            t_matrix = t_matrices[f"{master}-{slave}"]
+
+            aggregated_transformation = (aggregated_transformation @ t_matrix)
+
     o3d.visualization.draw_geometries(pcds)
-
-
-    
-
-

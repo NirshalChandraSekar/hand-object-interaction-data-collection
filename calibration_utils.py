@@ -5,65 +5,61 @@ import numpy as np
 import os
 from PIL import Image
 import h5py
+import cv2
+import time
 
-
-def retrieve_intrinsics():
-   """
-    Retrieves intrinsics for all connected RealSense devices and saves them as XML files
-    in the calibration folder in a format suitable for vicalib.
+def write_camera_intrinsics_to_file():
+    context = rs.context()
+    devices = context.query_devices()
     
-    Returns:
-        serial_nums (List[str]): List of detected device serial numbers.
-    """
-   w = 1280
-   h = 720
-   serial_nums = []
-   ctx = rs.context()
-   devices = ctx.query_devices()
+    if len(devices) == 0:
+        print("No RealSense devices found.")
+        return
 
-   directory_path = "calibration"
-   os.makedirs(directory_path, exist_ok=True)
+    for i, device in enumerate(devices):
+        serial = device.get_info(rs.camera_info.serial_number)
+        print(f"\nConnecting to device {i+1}: Serial Number = {serial}")
 
-   for device in devices:
-       try:
-           # Get the device by serial number
-           number = device.get_info(rs.camera_info.serial_number)
-           serial_nums.append(number)
-           cfg = rs.config()
-           cfg.enable_device(number)
-           cfg.enable_stream(rs.stream.depth, w, h, rs.format.z16, 30)
-           pipe = rs.pipeline()
-           selection = pipe.start(cfg)
-           depth_stream = selection.get_stream(rs.stream.depth).as_video_stream_profile()
-           intrinsics = depth_stream.get_intrinsics()
+        pipeline = rs.pipeline(context)
+        config = rs.config()
+        config.enable_device(serial)
+        config.enable_stream(rs.stream.color, 1280, 720, rs.format.bgr8, 30)
 
-           
+        started = False
+        try:
+            pipeline_profile = pipeline.start(config)
+            started = True
 
-           with open(f'calibration/{number}.xml', "w") as f:
-                    f.write(f"""
+            color_stream = pipeline_profile.get_stream(rs.stream.color)
+            video_profile = color_stream.as_video_stream_profile()
+            intrinsics = video_profile.get_intrinsics()
+
+            with open(f'calibration/{serial}.xml', "w") as f:
+                     f.write(f"""
 <rig>
-   <camera>
-       <camera_model name="" index="0" serialno="{number}" type="calibu_fu_fv_u0_v0_k1_k2_k3" version="0">
-           <width> {intrinsics.width} </width>
-           <height> {intrinsics.height} </height>
-           <!-- Use RDF matrix, [right down forward], to define the coordinate frame convention -->
-           <right> [ 1; 0; 0 ] </right>
-           <down> [ 0; 1; 0 ] </down>
-           <forward> [ 0; 0; 1 ] </forward>
-           <!-- Camera parameters ordered as per type name. -->
-           <params> [ {intrinsics.fx}; {intrinsics.fy}; {intrinsics.ppx}; {intrinsics.ppy}; 0.000; 0.000; 0.000 ] </params>
-       </camera_model>
-       <pose>
-           <!-- Camera pose. World from Camera point transfer. 3x4 matrix, in the RDF frame convention defined above -->
-           <T_wc> [ 1, 0, 0, 0; 0, 1, 0, 0; 0, 0, 1, 0 ] </T_wc>
-       </pose>
-   </camera>
+    <camera>
+        <camera_model name="" index="0" serialno="{serial}" type="calibu_fu_fv_u0_v0_k1_k2_k3" version="0">
+            <width> {intrinsics.width} </width>
+            <height> {intrinsics.height} </height>
+            <!-- Use RDF matrix, [right down forward], to define the coordinate frame convention -->
+            <right> [ 1; 0; 0 ] </right>
+            <down> [ 0; 1; 0 ] </down>
+            <forward> [ 0; 0; 1 ] </forward>
+            <!-- Camera parameters ordered as per type name. -->
+            <params> [ {intrinsics.fx}; {intrinsics.fy}; {intrinsics.ppx}; {intrinsics.ppy}; 0.000; 0.000; 0.000 ] </params>
+        </camera_model>
+        <pose>
+            <!-- Camera pose. World from Camera point transfer. 3x4 matrix, in the RDF frame convention defined above -->
+            <T_wc> [ 1, 0, 0, 0; 0, 1, 0, 0; 0, 0, 1, 0 ] </T_wc>
+        </pose>
+    </camera>
 </rig>
 """)
-       except StopIteration:
-           print(f"Camera with serial {number} not found.")
-  
-   return serial_nums
+        except Exception as e:
+            print(f"Failed to get color intrinsics from device {serial}: {e}")
+        finally:
+            if started:
+                pipeline.stop()
 
 def create_calibration_images_live(serial_numbers, num_frames=64):
    """
@@ -98,9 +94,7 @@ def create_calibration_images_live(serial_numbers, num_frames=64):
       
        frame_count = 0
       
-       try:
-           import cv2
-          
+       try:          
            while frame_count < num_frames:  # Capture up to 64 frames
                frames_data = []
               
@@ -128,7 +122,7 @@ def create_calibration_images_live(serial_numbers, num_frames=64):
                            for i, frame in enumerate(frames_data):
                                rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                                img = Image.fromarray(rgb_frame)
-                               img.save(f"calib_images/cam{i}_{frame_count:04}.png")
+                               img.save(f"calibration/calib_images/cam{i}_{frame_count:04}.png")
                           
                            print(f"Saved frame set {frame_count}")
                            frame_count += 1
@@ -214,85 +208,61 @@ def create_calibration_images(dataset_path, num_frames = 64):
                color_image_0 = color_image_0[..., ::-1]  # BGR to RGB
                color_image_1 = color_image_1[..., ::-1]
 
-           Image.fromarray(color_image_0).save(f"calib_images/cam0_{i:04}.png")
-           Image.fromarray(color_image_1).save(f"calib_images/cam1_{i:04}.png")
-
+           Image.fromarray(color_image_0).save(f"calibration/calib_images/cam0_{i:04}.png")
+           Image.fromarray(color_image_1).save(f"calibration/calib_images/cam1_{i:04}.png")
 
 def run_calibrations(serial_numbers, offline_calibration = False, dataset_path = None):
-   """
-    Runs calibration for consecutive pairs of serial numbers and extracts transformation matrices.
+    script_path = "calibration/offline_calib.sh" if offline_calibration else "calibration/online_calib.sh"
+    t_matrices = {}
+    for i in range((len(serial_numbers) - 1)):
+        id0 = f"{serial_numbers[i]}"
+        id1 = f"{serial_numbers[i+1]}"
+        print(f"Running calibration for {id0} and {id1}")
 
-    Args:
-        serial_numbers (List[str]): List of RealSense serial numbers.
-        offline_calibration (bool): Whether to use offline dataset or live data.
-        dataset_path (str, optional): Path to dataset file if offline.
-
-    Returns:
-        t_matrices (dict): Dictionary of transformation matrices {(master, slave): matrix}.
-    """
-   script_path = "calibration/offline_calib.sh" if offline_calibration else "calibration/online_calib.sh"
-   t_matrices = {}
-   for i in range((len(serial_numbers) - 1)):
-       id0 = f"{serial_numbers[i]}"
-       id1 = f"{serial_numbers[i+1]}"
-       print(f"Running calibration for {id0} and {id1}")
-
-       if offline_calibration and dataset_path is None:
+        if offline_calibration and dataset_path is None:
            print("Capturing live frames from cameras...")
            create_calibration_images_live([id0, id1])
-       elif offline_calibration:
+        elif offline_calibration:
            print("Using offline dataset...")
            create_calibration_images(dataset_path)
 
+        with open(script_path, "r") as f:
+            content = f.read()
 
-       print("Images created for calibration.")
-       with open(script_path, "r") as f:
-           content = f.read()
-
-
-       # Replace values after export ID0=
-       # Replace only the values after export ID0= and export ID1= without changing the rest
-       content = re.sub(r"(export\s+ID0=)[^\s#]+", lambda m: m.group(1) + id0, content)
-       content = re.sub(r"(export\s+ID1=)[^\s#]+", lambda m: m.group(1) + id1, content)
-
-       with open(script_path, "w") as f:
-           f.write(content)
-
-       subprocess.run(["./" + script_path], check=True)
-
-       output_path = f"calibration/{id0}-{id1}.xml"
-      
-       with open(output_path, "r") as f:
-           content = f.read()
+        # Replace values after export ID0=
+        # Replace only the values after export ID0= and export ID1= without changing the rest
+        content = re.sub(r"(export\s+ID0=)[^\s#]+", lambda m: m.group(1) + id0, content)
+        content = re.sub(r"(export\s+ID1=)[^\s#]+", lambda m: m.group(1) + id1, content)
 
 
-       matches = re.findall(r"<T_wc>\s*(.*?)\s*</T_wc>", content, re.DOTALL)
-       if matches:
-           matrix_str = matches[-1].strip()
+        with open(script_path, "w") as f:
+            f.write(content)
 
+        subprocess.run(["./" + script_path], check=True)
 
-           # Clean and convert to NumPy array
-           matrix_str = matrix_str.strip("[]")  # remove outer brackets
-           rows = [r.strip() for r in matrix_str.split(";")]
-           matrix = np.array([[float(num.strip()) for num in row.split(",")] for row in rows])
-           t_matrix = matrix
-       else:
-           t_matrix = ""
+        output_path = f"calibration/{id0}-{id1}.xml"
+        
+        with open(output_path, "r") as f:
+            content = f.read()
 
+        matches = re.findall(r"<T_wc>\s*(.*?)\s*</T_wc>", content, re.DOTALL)
+        t_matrix = np.eye(4)
+        if matches:
+            matrix_str = matches[-1].strip()
 
-       t_matrices[(id0,id1)] = t_matrix
+            # Clean and convert to NumPy array
+            matrix_str = matrix_str.strip("[]")  # remove outer brackets
+            rows = [r.strip() for r in matrix_str.split(";")]
+            matrix = np.array([[float(num.strip()) for num in row.split(",")] for row in rows])
+            #Correctly set the rotation and translation
+            t_matrix[:3, :3] = matrix[:, :3]
+            t_matrix[:3, 3] = matrix[:, 3]
 
+        t_matrices[f"{id0}-{id1}"] = t_matrix
 
-   return t_matrices
+        time.sleep(3)
 
-
-
-# serial_nums = retrieve_intrinsics()
-# transformation_matrices = run_calibrations(serial_nums, True)
-
-
-# print("Transformation matrices:")
-# for key, value in transformation_matrices.items():
-#     print(f"{key}: {value}")
-
-
+    print("Transformation matrices:")
+    for key, value in t_matrices.items():
+        print(f"{key}: {value}")
+    return t_matrices

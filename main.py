@@ -11,15 +11,21 @@ Steps performed:
 6. Record synchronized audio and video data.
 """
 
+serial_nums = {0: '213522250729', 1:'213622251272', 2: '037522250789'}
+
 import camera_utils as cam
 import visualization_utils as vis
 import calibration_utils as calib
 
-if "__name__" == "__main__":
-    vis.view_live_camera_streams()
-    serial_nums = calib.retrieve_intrinsics()
-    t_matrices = calib.calibrate_extrinsics(serial_nums, True)
+if __name__ == "__main__":
+    cam.view_live_camera_streams()  
+    calib.write_camera_intrinsics_to_file()
+    # '213522250729','037522250789'
+    # 213522250729, '213622251272'
+    # '213622251272','037522250789' both
+    t_matrices = calib.run_calibrations(serial_nums)
     cam.save_images()
     vis.view_combined_pcd(serial_nums, t_matrices)
+    print("Calibration completed and point cloud visualized.")
 
     cam.record_audio_video()

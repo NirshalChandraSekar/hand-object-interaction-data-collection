@@ -122,11 +122,14 @@ class Camera:
 
         start_time = datetime.now(timezone.utc).isoformat()
 
-        output_dir = "dataset"
-        os.makedirs(output_dir, exist_ok=True)
+        vid_dir = "dataset/videos"
+        os.makedirs(vid_dir, exist_ok=True)
 
-        output_file = f"{output_dir}/video/{start_time}.h5"
-        audio_output_file = f"{output_dir}/audio/{start_time}.wav"
+        audio_dir = "dataset/audio"
+        os.makedirs(audio_dir, exist_ok=True)
+
+        output_file = f"{vid_dir}/{start_time}.h5"
+        audio_output_file = f"{audio_dir}/{start_time}.wav"
 
         print(f"[INFO] Saving video to: {output_file}")
         print(f"[INFO] Saving audio to: {audio_output_file}")
@@ -237,6 +240,9 @@ def record_audio_video():
     Main entry point to start recording video and audio streams based on keyboard input.
     Starts listener thread to handle 'r' and 'q' keys.
     """
+
+    global recording, stop_requested, exit_requested
+
     camera = Camera()
     camera.check_available_cameras()
 
@@ -268,7 +274,6 @@ def view_live_camera_streams(serial_numbers=[device.get_info(rs.camera_info.seri
         config = rs.config()
         config.enable_device(serial)
         config.enable_stream(rs.stream.color, 1280, 720, rs.format.bgr8, 30)
-        config.enable_stream(rs.stream.depth, 1280, 720, rs.format.z16, 30)
         pipeline.start(config)
         pipelines.append(pipeline)
     
@@ -277,21 +282,13 @@ def view_live_camera_streams(serial_numbers=[device.get_info(rs.camera_info.seri
             # Process each camera
             for i, pipeline in enumerate(pipelines):
                 frames = pipeline.wait_for_frames()
-                color_frame = frames.get_color_frame()
-                depth_frame = frames.get_depth_frame()
-                
-                if not color_frame or not depth_frame:
+                color_frame = frames.get_color_frame()                
+                if not color_frame:
                     continue
-                    
                 color_image = np.asanyarray(color_frame.get_data())
-                
-                # Align depth to color
-                aligned_depth_frame = rs.align(rs.stream.color).process(frames).get_depth_frame()
-                aligned_depth_image = np.asanyarray(aligned_depth_frame.get_data())
-                
+                                
                 # Show camera-specific windows
                 cv2.imshow(f'Color Stream {serial_numbers[i]}', color_image)
-                cv2.imshow(f'Aligned Depth Stream {serial_numbers[i]}', aligned_depth_image)
             
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
@@ -301,62 +298,61 @@ def view_live_camera_streams(serial_numbers=[device.get_info(rs.camera_info.seri
         cv2.destroyAllWindows()
 
 def save_images():
-   """
+    """
     Captures and saves single color and depth frames from all connected RealSense cameras.
     Saves images and intrinsics data into the 'data' directory.
     """
-   ctx = rs.context()
-   devices = ctx.query_devices()
-   os.makedirs('data', exist_ok=True)
+    ctx = rs.context()
+    devices = ctx.query_devices()
+    os.makedirs('data', exist_ok=True)
 
-   for device in devices:
-       if device.supports(rs.camera_info.serial_number):
-           serial_number = device.get_info(rs.camera_info.serial_number)
-           pipeline = rs.pipeline()
-           config = rs.config()
-           config.enable_device(serial_number)
-           config.enable_stream(rs.stream.color, 1280, 720, rs.format.bgr8, 30)
-           config.enable_stream(rs.stream.depth, 1280, 720, rs.format.z16, 30)
-           pipeline.start(config)
+    for device in devices:
+        serial_number = device.get_info(rs.camera_info.serial_number)
+        pipeline = rs.pipeline()
+        config = rs.config()
+        config.enable_device(serial_number)
+        config.enable_stream(rs.stream.color, 1280, 720, rs.format.bgr8, 30)
+        config.enable_stream(rs.stream.depth, 1280, 720, rs.format.z16, 30)
+        pipeline.start(config)
 
-           align = rs.align(rs.stream.color)
-           try:
-               frames = pipeline.wait_for_frames()
-               aligned_frames = align.process(frames)
-               # Get aligned color and depth frames
-               color_frame = aligned_frames.get_color_frame()
-               depth_frame = aligned_frames.get_depth_frame()
+        align = rs.align(rs.stream.color)
+        try:
+            frames = pipeline.wait_for_frames()
+            aligned_frames = align.process(frames)
+            # Get aligned color and depth frames
+            color_frame = aligned_frames.get_color_frame()
+            depth_frame = aligned_frames.get_depth_frame()
 
-               if not color_frame or not depth_frame:
-                   print(f"Frames not captured for device {serial_number}")
-                   continue
+            if not color_frame or not depth_frame:
+                print(f"Frames not captured for device {serial_number}")
+                continue
 
-               # Convert images to numpy arrays
-               color_image = np.asanyarray(color_frame.get_data())
-               depth_image = np.asanyarray(depth_frame.get_data())
+            # Convert images to numpy arrays
+            color_image = np.asanyarray(color_frame.get_data())
+            depth_image = np.asanyarray(depth_frame.get_data())
 
-               # Save images with serial number as filename
-               cv2.imwrite(f'data/{serial_number}_color.png', color_image)
-               np.save(f'data/{serial_number}_depth.npy', depth_image)
+            # Save images with serial number as filename
+            cv2.imwrite(f'data/{serial_number}_color.png', color_image)
+            np.save(f'data/{serial_number}_depth.npy', depth_image)
 
-               intrinsics = color_frame.profile.as_video_stream_profile().intrinsics
-               # Save intrinsic parameters
-               intrinsics_data = {
-                   'width': intrinsics.width,
-                   'height': intrinsics.height,
-                   'ppx': intrinsics.ppx,
-                   'ppy': intrinsics.ppy,
-                   'fx': intrinsics.fx,
-                   'fy': intrinsics.fy,
-                   'model': intrinsics.model,
-                   'coeffs': intrinsics.coeffs
-               }
-               np.save(f'data/{serial_number}_intrinsics.npy', intrinsics_data)
-
-
-           finally:
-               # Stop the pipeline
-               pipeline.stop()    
+            intrinsics = color_frame.profile.as_video_stream_profile().intrinsics
+            # Save intrinsic parameters
+            intrinsics_data = {
+                'width': intrinsics.width,
+                'height': intrinsics.height,
+                'ppx': intrinsics.ppx,
+                'ppy': intrinsics.ppy,
+                'fx': intrinsics.fx,
+                'fy': intrinsics.fy,
+                'model': intrinsics.model,
+                'coeffs': intrinsics.coeffs
+            }
+            np.save(f'data/{serial_number}_intrinsics.npy', intrinsics_data)
+        except Exception as e:
+            print(f"Error capturing frames for device {serial_number}: {e}")
+        finally:
+            # Stop the pipeline
+            pipeline.stop()    
 
 # Translate Later
 # audio_start_absolute = start_time + audio_start_time  # global clock
