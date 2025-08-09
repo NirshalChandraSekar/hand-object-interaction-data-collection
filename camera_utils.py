@@ -101,7 +101,7 @@ class Camera:
         intr = profile.get_intrinsics()
         return intr
 
-    def record_video_streams(self, serial_numbers=None, stop_flag=lambda: False):
+    def record_video_streams(self, t_matrices, serial_numbers=None, stop_flag=lambda: False):
         """
         Records synchronized color and depth streams from specified RealSense cameras,
         storing frames and timestamps in an HDF5 file. Also records audio in parallel.
@@ -136,6 +136,7 @@ class Camera:
 
         try:
             with h5py.File(output_file, 'w') as h5file:
+                # TODO: ADD T MATRIX TO HDF5 #
                 color_groups = {serial: h5file.create_group(f"{serial}/frames/color") for serial in serial_numbers}
                 depth_groups = {serial: h5file.create_group(f"{serial}/frames/depth") for serial in serial_numbers}
                 timestamps = {serial: h5file.create_dataset(f"{serial}/frames/timestamps", shape=(0,), maxshape=(None,), dtype='float64')
@@ -235,7 +236,7 @@ def listen_for_keys():
     with keyboard.Listener(on_press=on_press) as listener:
         listener.join()
 
-def record_audio_video():
+def record_audio_video(t_matrices):
     """
     Main entry point to start recording video and audio streams based on keyboard input.
     Starts listener thread to handle 'r' and 'q' keys.
@@ -254,7 +255,7 @@ def record_audio_video():
     while not exit_requested:
         if recording:
             stop_requested = False
-            camera.record_video_streams(stop_flag=lambda: stop_requested)
+            camera.record_video_streams(t_matrices, stop_flag=lambda: stop_requested)
             recording = False
         time.sleep(0.1)
 

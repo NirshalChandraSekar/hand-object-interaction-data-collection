@@ -28,4 +28,4 @@ if __name__ == "__main__":
     vis.view_combined_pcd(serial_nums, t_matrices)
     print("Calibration completed and point cloud visualized.")
 
-    cam.record_audio_video()
+    cam.record_audio_video(t_matrices)

@@ -9,6 +9,16 @@ import cv2
 import time
 
 def write_camera_intrinsics_to_file():
+    """
+    Connects to all RealSense cameras connected to the system,
+    retrieves the color camera intrinsics, and writes them to XML files
+    in a 'calibration/' folder named by their serial numbers.
+
+    Each XML file contains camera parameters formatted for use with
+    Calibu or similar calibration tools.
+
+    If no devices are found, prints a message and returns.
+    """
     context = rs.context()
     devices = context.query_devices()
     
@@ -18,7 +28,6 @@ def write_camera_intrinsics_to_file():
 
     for i, device in enumerate(devices):
         serial = device.get_info(rs.camera_info.serial_number)
-        print(f"\nConnecting to device {i+1}: Serial Number = {serial}")
 
         pipeline = rs.pipeline(context)
         config = rs.config()
@@ -63,12 +72,22 @@ def write_camera_intrinsics_to_file():
 
 def create_calibration_images_live(serial_numbers, num_frames=64):
    """
-    Captures color frames from RealSense cameras for calibration and saves them to disk.
-    Press 's' to save current frames or 'q' to quit.
+    Captures color frames live from multiple RealSense cameras simultaneously
+    for the purpose of calibration. Saves captured images to 'calibration/calib_images'.
 
-    Args:
-        serial_numbers (List[str]): List of RealSense camera serial numbers.
-        num_frames (int): Number of frame sets to capture.
+    Interactive controls:
+        - Press 's' to save the current frames from all cameras.
+        - Press 'q' to quit capturing before reaching num_frames.
+
+    If OpenCV windows are not available (e.g., no display), auto-captures frames
+    every 2 seconds without preview.
+
+    Parameters:
+    -----------
+    serial_numbers : list of str
+        List of serial numbers of the RealSense cameras to capture from.
+    num_frames : int, optional
+        Number of frame sets to capture (default is 64).
     """
    os.makedirs("calibration/calib_images", exist_ok=True)
   
@@ -178,11 +197,18 @@ def create_calibration_images_live(serial_numbers, num_frames=64):
 
 def create_calibration_images(dataset_path, num_frames = 64):
    """
-    Extracts calibration images from an HDF5 dataset and saves them as PNGs.
+    Extracts color calibration images from an existing HDF5 dataset and saves them
+    as PNG files in 'calibration/calib_images'.
 
-    Args:
-        dataset_path (str): Path to the dataset HDF5 file.
-        num_frames (int): Number of frames to extract.
+    The function assumes the dataset contains multiple cameras with color frames
+    organized under serial number groups.
+
+    Parameters:
+    -----------
+    dataset_path : str
+        File path to the HDF5 dataset.
+    num_frames : int, optional
+        Number of frames to extract from each camera (default is 64).
     """
    if not os.path.exists(dataset_path):
        print(f"Dataset path {dataset_path} does not exist.")
@@ -212,6 +238,30 @@ def create_calibration_images(dataset_path, num_frames = 64):
            Image.fromarray(color_image_1).save(f"calibration/calib_images/cam1_{i:04}.png")
 
 def run_calibrations(serial_numbers, offline_calibration = False, dataset_path = None):
+    """
+    Runs camera calibration for adjacent camera pairs using either live capture
+    or an offline dataset.
+
+    For each adjacent pair, it updates a shell script with the correct camera IDs,
+    executes the calibration script, then parses the resulting XML to extract
+    the transformation matrix (pose) between the camera pair.
+
+    Parameters:
+    -----------
+    serial_numbers : dict
+        Dictionary mapping camera indices to serial numbers.
+    offline_calibration : bool, optional
+        If True, calibration images will be extracted from dataset_path; otherwise,
+        live capture will be used (default is False).
+    dataset_path : str or None, optional
+        Path to offline dataset file; required if offline_calibration is True.
+
+    Returns:
+    --------
+    dict
+        Dictionary mapping camera pair strings (e.g., "ID0-ID1") to 4x4 numpy arrays
+        representing the transformation matrix from camera 1 to camera 2.
+    """
     script_path = "calibration/offline_calib.sh" if offline_calibration else "calibration/online_calib.sh"
     t_matrices = {}
     for i in range((len(serial_numbers) - 1)):
