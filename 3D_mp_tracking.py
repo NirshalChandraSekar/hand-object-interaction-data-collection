@@ -158,7 +158,7 @@ def process_meidapipe_results(results, intrinsic, depth_image, t_matrix):
     wrist_3d_transformed = t_matrix @ wrist_3d_homogeneous  # Matrix-vector multiplication
     return wrist_3d_transformed[:3]  # Drop the homogeneous component
 
-def render_dataset_with_hand_tracking(dataset_path, t_matrices, serial_numbers):
+def render_dataset_with_hand_tracking(dataset_path, serial_numbers):
     """
     Visualize a multi-camera RGB-D dataset with MediaPipe hand tracking.
     
@@ -172,8 +172,6 @@ def render_dataset_with_hand_tracking(dataset_path, t_matrices, serial_numbers):
     -----------
     dataset_path : str
         Path to the HDF5 dataset file.
-    t_matrices : dict
-        Dictionary mapping camera pair strings to 4x4 transformation numpy arrays.
     serial_numbers : dict
         Dictionary mapping camera indices to serial number strings.
     """
@@ -189,11 +187,10 @@ def render_dataset_with_hand_tracking(dataset_path, t_matrices, serial_numbers):
         sphere_visible = False
 
         transform_matrices = [np.eye(4)]
+        t_matrix = np.load(dataset['t_matrices'])
         for i in range(1, len(serial_numbers)):
-            master = serial_nums[i-1]
-            slave = serial_nums[i]
-            t_matrix = t_matrices[f"{master}-{slave}"]
-            transform_matrices.append(transform_matrices[-1] @ t_matrix)
+            key = f'{serial_nums[i-1]}-{serial_nums[i]}'
+            transform_matrices.append(transform_matrices[-1] @ t_matrix[key][()])
             
         min_frame_count = min(len(list(dataset[f'{serial}/frames/color'])) for serial in serial_numbers.values())
 
@@ -264,21 +261,6 @@ def render_dataset_with_hand_tracking(dataset_path, t_matrices, serial_numbers):
     vis.destroy_window()
 
 if __name__ == "__main__":
-
-    transform_matrices = {
-    "213522250729-213622251272": np.array([
-        [ 0.3330974,  0.5598185, -0.7587156,  0.5890219],
-        [-0.6346248,  0.7282318,  0.258708,  -0.192262 ],
-        [ 0.6973503,  0.3953248,  0.5978469,  0.4151737],
-        [ 0.        ,  0.        ,  0.        ,  1.        ]
-    ]), 
-    "213622251272-037522250789": np.array([
-        [-0.2002689, -0.6192168,  0.7592516, -0.4717122],
-        [ 0.7569423,  0.3942262,  0.5211756, -0.4153918],
-        [-0.6220376,  0.6790849,  0.3897601,  0.4593527],
-        [ 0.        ,  0.        ,  0.        ,  1.        ]
-    ])
-}
     serial_nums = {0: '213522250729', 1:'213622251272', 2: '037522250789'}
 
-    render_dataset_with_hand_tracking(dataset_path, transform_matrices, serial_nums)
+    render_dataset_with_hand_tracking(dataset_path, serial_nums)

@@ -43,7 +43,13 @@ class AudioRecorder:
 
         p = pyaudio.PyAudio()
         stream = p.open(format=self.format,
-                        channels=self.channels,
+                        channels=self.channels,ine in enumerate(pipelines):
+                        frames = pipeline.wait_for_frames()
+                        aligned_frames = align.process(frames)
+                        color_frame = aligned_frames.get_color_frame()
+                        depth_frame = aligned_frames.get_depth_frame()
+
+                        if not color_frame or not depth_f
                         rate=self.rate,
                         input=True,
                         frames_per_buffer=self.chunk)
@@ -136,7 +142,10 @@ class Camera:
 
         try:
             with h5py.File(output_file, 'w') as h5file:
-                # TODO: ADD T MATRIX TO HDF5 #
+                t_matrices_group = h5file.create_group("t_matrices")
+                t_matrices_group = h5file.create_group("t_matrices")
+                for cam_pair in t_matrices:
+                    t_matrices_group.create_dataset(cam_pair, data=t_matrices[cam_pair])
                 color_groups = {serial: h5file.create_group(f"{serial}/frames/color") for serial in serial_numbers}
                 depth_groups = {serial: h5file.create_group(f"{serial}/frames/depth") for serial in serial_numbers}
                 timestamps = {serial: h5file.create_dataset(f"{serial}/frames/timestamps", shape=(0,), maxshape=(None,), dtype='float64')
