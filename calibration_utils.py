@@ -195,7 +195,7 @@ def create_calibration_images_live(serial_numbers, num_frames=64):
        print(f"Captured {frame_count} frame sets for calibration")
 
 
-def create_calibration_images(dataset_path, num_frames = 64):
+def create_calibration_images(dataset_path, serials, num_frames = 64):
    """
     Extracts color calibration images from an existing HDF5 dataset and saves them
     as PNG files in 'calibration/calib_images'.
@@ -217,10 +217,6 @@ def create_calibration_images(dataset_path, num_frames = 64):
    os.makedirs("calibration/calib_images", exist_ok=True)
 
    with h5py.File(dataset_path, "r") as data:
-       serials = list(data.keys())
-       print(serials)
-
-
        os.makedirs("calib_images", exist_ok=True)
        max_frames = len(data[f'{serials[0]}/frames/color'])
 
@@ -237,7 +233,7 @@ def create_calibration_images(dataset_path, num_frames = 64):
            Image.fromarray(color_image_0).save(f"calibration/calib_images/cam0_{i:04}.png")
            Image.fromarray(color_image_1).save(f"calibration/calib_images/cam1_{i:04}.png")
 
-def run_calibrations(serial_numbers, offline_calibration = False, dataset_path = None):
+def run_calibrations(serial_numbers, dataset_path = None):
     """
     Runs camera calibration for adjacent camera pairs using either live capture
     or an offline dataset.
@@ -262,19 +258,17 @@ def run_calibrations(serial_numbers, offline_calibration = False, dataset_path =
         Dictionary mapping camera pair strings (e.g., "ID0-ID1") to 4x4 numpy arrays
         representing the transformation matrix from camera 1 to camera 2.
     """
-    script_path = "calibration/offline_calib.sh" if offline_calibration else "calibration/online_calib.sh"
-    t_matrices = {}
+    script_path = "calibration/offline_calib.sh" if dataset_path is not None else "calibration/online_calib.sh"
     for i in range((len(serial_numbers) - 1)):
-        id0 = f"{serial_numbers[i]}"
-        id1 = f"{serial_numbers[i+1]}"
+        serial_master = serial_numbers[i]
+        serial_slave = serial_numbers[i+1]
+        id0 = f"{serial_master}"
+        id1 = f"{serial_slave}"
         print(f"Running calibration for {id0} and {id1}")
 
-        if offline_calibration and dataset_path is None:
-           print("Capturing live frames from cameras...")
-           create_calibration_images_live([id0, id1])
-        elif offline_calibration:
-           print("Using offline dataset...")
-           create_calibration_images(dataset_path)
+        if dataset_path:
+           print("Capturing calibration frames...")
+           create_calibration_images(dataset_path, [serial_master, serial_slave])
 
         with open(script_path, "r") as f:
             content = f.read()
@@ -289,30 +283,37 @@ def run_calibrations(serial_numbers, offline_calibration = False, dataset_path =
             f.write(content)
 
         subprocess.run(["./" + script_path], check=True)
+        time.sleep(10)
 
-        output_path = f"calibration/{id0}-{id1}.xml"
-        
-        with open(output_path, "r") as f:
-            content = f.read()
+def get_transformation_matrices(serial_numbers):
+    t_matrices = {}
+    try:
+        for i in range((len(serial_numbers) - 1)):
+            id0 = f"{serial_numbers[i]}"
+            id1 = f"{serial_numbers[i+1]}"
+            output_path = f"calibration/{id0}-{id1}.xml"
+            with open(output_path, "r") as f:
+                content = f.read()
 
-        matches = re.findall(r"<T_wc>\s*(.*?)\s*</T_wc>", content, re.DOTALL)
-        t_matrix = np.eye(4)
-        if matches:
-            matrix_str = matches[-1].strip()
+            matches = re.findall(r"<T_wc>\s*(.*?)\s*</T_wc>", content, re.DOTALL)
+            t_matrix = np.eye(4)
+            if matches:
+                matrix_str = matches[-1].strip()
 
-            # Clean and convert to NumPy array
-            matrix_str = matrix_str.strip("[]")  # remove outer brackets
-            rows = [r.strip() for r in matrix_str.split(";")]
-            matrix = np.array([[float(num.strip()) for num in row.split(",")] for row in rows])
-            #Correctly set the rotation and translation
-            t_matrix[:3, :3] = matrix[:, :3]
-            t_matrix[:3, 3] = matrix[:, 3]
+                # Clean and convert to NumPy array
+                matrix_str = matrix_str.strip("[]")  # remove outer brackets
+                rows = [r.strip() for r in matrix_str.split(";")]
+                matrix = np.array([[float(num.strip()) for num in row.split(",")] for row in rows])
+                #Correctly set the rotation and translation
+                t_matrix[:3, :3] = matrix[:, :3]
+                t_matrix[:3, 3] = matrix[:, 3]
 
-        t_matrices[f"{id0}-{id1}"] = t_matrix
+                t_matrices[f"{id0}-{id1}"] = t_matrix
 
-        time.sleep(3)
-
-    print("Transformation matrices:")
-    for key, value in t_matrices.items():
-        print(f"{key}: {value}")
-    return t_matrices
+        print("Transformation matrices:")
+        for key, value in t_matrices.items():
+            print(f"{key}: {value}")
+        return t_matrices
+    except Exception as e:
+        print(f"Error reading transformation matrices: {e}")
+        return None

@@ -6,7 +6,7 @@ import open3d as o3d
 import pyrealsense2 as rs
 import os
 
-dataset_path = '/home/pearl/Downloads/2025-08-08T21_55_47.951669+00_00.h5'  # <- change this to your actual path if needed
+import calibration_utils as calib
 
 def load_intrinsics(dataset, serial_numbers):
     """
@@ -76,7 +76,6 @@ def create_pcd(index, serial_number, frame_index, dataset, intrinsic, transform_
         o3d.geometry.Image(color_image),
         o3d.geometry.Image(depth_image),
         depth_scale=1.0,
-        depth_trunc=2.0,
         convert_rgb_to_intensity=False
     )
     
@@ -158,7 +157,7 @@ def process_meidapipe_results(results, intrinsic, depth_image, t_matrix):
     wrist_3d_transformed = t_matrix @ wrist_3d_homogeneous  # Matrix-vector multiplication
     return wrist_3d_transformed[:3]  # Drop the homogeneous component
 
-def render_dataset_with_hand_tracking(dataset_path, serial_numbers):
+def render_dataset_with_hand_tracking(dataset_path, use_offline_calib=False):
     """
     Visualize a multi-camera RGB-D dataset with MediaPipe hand tracking.
     
@@ -177,23 +176,33 @@ def render_dataset_with_hand_tracking(dataset_path, serial_numbers):
     """
     with h5py.File(dataset_path, 'r') as dataset:
         #Setup
+        serial_list = list(dataset.keys())[:3]  # example to get first 3 serial strings
+        serial_numbers = dict(enumerate(serial_list))
+        print("Cameras in dataset:", serial_numbers)
+
         pcd_formatted_intrinsics, intrinsic_data_dict = load_intrinsics(dataset, serial_numbers)
         
+        transform_matrices = [np.eye(4)]
+
+        if use_offline_calib or 't_matrices' not in dataset:
+            calib.write_camera_intrinsics_to_file()
+            calib.run_calibrations(serial_numbers, dataset_path)
+            t_matrix = calib.get_transformation_matrices(serial_numbers)
+        else:
+            t_matrix = dataset['t_matrices']
+
+        for i in range(1, len(serial_numbers)):
+            key = f'{serial_numbers[i-1]}-{serial_numbers[i]}'
+            transform_matrices.append(transform_matrices[-1] @ t_matrix[key][()])
+
         vis = o3d.visualization.Visualizer()
         vis.create_window()
         
         sphere = o3d.geometry.TriangleMesh.create_sphere(radius=0.02)
         sphere.paint_uniform_color([1, 0, 0])  # red sphere
         sphere_visible = False
-
-        transform_matrices = [np.eye(4)]
-        t_matrix = np.load(dataset['t_matrices'])
-        for i in range(1, len(serial_numbers)):
-            key = f'{serial_nums[i-1]}-{serial_nums[i]}'
-            transform_matrices.append(transform_matrices[-1] @ t_matrix[key][()])
             
         min_frame_count = min(len(list(dataset[f'{serial}/frames/color'])) for serial in serial_numbers.values())
-
         # Visualization loop
         for frame_index in range(min_frame_count):
             wrist_3d = None
@@ -261,6 +270,8 @@ def render_dataset_with_hand_tracking(dataset_path, serial_numbers):
     vis.destroy_window()
 
 if __name__ == "__main__":
-    serial_nums = {0: '213522250729', 1:'213622251272', 2: '037522250789'}
+    dataset_path = 'dataset/task2/videos/2025-08-12T21:03:09.938577+00:00.h5'  # <- change this to your actual path if needed
 
-    render_dataset_with_hand_tracking(dataset_path, serial_nums)
+    # serial_nums = {0: '213522250729', 1:'213622251272', 2: '037522250789'}
+    render_dataset_with_hand_tracking(dataset_path)
+    # render_dataset_with_hand_tracking(dataset_path, True)

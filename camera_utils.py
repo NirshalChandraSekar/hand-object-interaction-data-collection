@@ -13,7 +13,7 @@ import os
 recording = False
 stop_requested = False
 exit_requested = False
-
+task = None
 
 class AudioRecorder:
     """
@@ -43,18 +43,11 @@ class AudioRecorder:
 
         p = pyaudio.PyAudio()
         stream = p.open(format=self.format,
-                        channels=self.channels,ine in enumerate(pipelines):
-                        frames = pipeline.wait_for_frames()
-                        aligned_frames = align.process(frames)
-                        color_frame = aligned_frames.get_color_frame()
-                        depth_frame = aligned_frames.get_depth_frame()
-
-                        if not color_frame or not depth_f
+                        channels=self.channels,
                         rate=self.rate,
                         input=True,
                         frames_per_buffer=self.chunk)
 
-        print("[AUDIO] Recording started.")
         while not self.stop_event.is_set():
             data = stream.read(self.chunk, exception_on_overflow=False)
             self.frames.append(data)
@@ -62,7 +55,6 @@ class AudioRecorder:
         stream.stop_stream()
         stream.close()
         p.terminate()
-        print("[AUDIO] Recording stopped.")
 
         wf = wave.open(self.output_file, 'wb')
         wf.setnchannels(self.channels)
@@ -107,7 +99,7 @@ class Camera:
         intr = profile.get_intrinsics()
         return intr
 
-    def record_video_streams(self, t_matrices, serial_numbers=None, stop_flag=lambda: False):
+    def record_video_streams(self, t_matrices, task, serial_numbers=None, stop_flag=lambda: False):
         """
         Records synchronized color and depth streams from specified RealSense cameras,
         storing frames and timestamps in an HDF5 file. Also records audio in parallel.
@@ -128,10 +120,15 @@ class Camera:
 
         start_time = datetime.now(timezone.utc).isoformat()
 
-        vid_dir = "dataset/videos"
+        if task == "1":
+            dir = "dataset/task1"
+        else:
+            dir = "dataset/task2"
+
+        vid_dir = f"{dir}/videos"
         os.makedirs(vid_dir, exist_ok=True)
 
-        audio_dir = "dataset/audio"
+        audio_dir = f"{dir}/audio"
         os.makedirs(audio_dir, exist_ok=True)
 
         output_file = f"{vid_dir}/{start_time}.h5"
@@ -142,10 +139,10 @@ class Camera:
 
         try:
             with h5py.File(output_file, 'w') as h5file:
-                t_matrices_group = h5file.create_group("t_matrices")
-                t_matrices_group = h5file.create_group("t_matrices")
-                for cam_pair in t_matrices:
-                    t_matrices_group.create_dataset(cam_pair, data=t_matrices[cam_pair])
+                if t_matrices is not None:
+                    t_matrices_group = h5file.create_group("t_matrices")
+                    for cam_pair in t_matrices:
+                        t_matrices_group.create_dataset(cam_pair, data=t_matrices[cam_pair])
                 color_groups = {serial: h5file.create_group(f"{serial}/frames/color") for serial in serial_numbers}
                 depth_groups = {serial: h5file.create_group(f"{serial}/frames/depth") for serial in serial_numbers}
                 timestamps = {serial: h5file.create_dataset(f"{serial}/frames/timestamps", shape=(0,), maxshape=(None,), dtype='float64')
@@ -175,7 +172,7 @@ class Camera:
                     
                     params_group[serial].create_dataset("start_time", data=start_time, dtype=h5py.string_dtype(encoding='utf-8'))
 
-                print("Recording started. Press 'r' again to stop.")
+                print("[VIDEO] Recording started. Press 'r' again to stop.")
                 recording_start = datetime.now(timezone.utc).timestamp()
 
                 # Start audio thread
@@ -219,7 +216,7 @@ class Camera:
         finally:
             for pipeline in pipelines:
                 pipeline.stop()
-            print("Recording session finished. Press 'r' again to start.")
+            print("Recording session finished. Press '1' or '2' to again to start. Press 'q' to quit.")
 
 
 def listen_for_keys():
@@ -227,31 +224,39 @@ def listen_for_keys():
     Listens for keyboard inputs ('r' to start/stop recording, 'q' to quit) in a separate thread.
     """
     def on_press(key):
-        global recording, stop_requested, exit_requested
+        global recording, stop_requested, exit_requested, task
         if hasattr(key, 'char'):
-            if key.char == 'r':
+            if key.char in ('1', '2'):
+                task = key.char
                 if recording:
                     stop_requested = True
                     print("[INFO] Stopping recording.")
                 else:
                     recording = True
-                    print("[INFO] Starting new recording.")
+                    print(f"[INFO] Starting new recording for task {task}.")
+            elif key.char == 'r':
+                if recording:
+                    stop_requested = True
+                    print("[INFO] Stopping recording.")
+                else:
+                    print("[WARNING] Press '1' or '2' to start a task-specific recording.")
             elif key.char == 'q':
                 stop_requested = True
                 exit_requested = True
                 print("[INFO] Exiting program.")
                 return False
 
+
     with keyboard.Listener(on_press=on_press) as listener:
         listener.join()
 
-def record_audio_video(t_matrices):
+def record_audio_video(serial_numbers=None, t_matrices=None):
     """
     Main entry point to start recording video and audio streams based on keyboard input.
     Starts listener thread to handle 'r' and 'q' keys.
     """
 
-    global recording, stop_requested, exit_requested
+    global recording, stop_requested, exit_requested, task
 
     camera = Camera()
     camera.check_available_cameras()
@@ -259,13 +264,14 @@ def record_audio_video(t_matrices):
     listener_thread = threading.Thread(target=listen_for_keys, daemon=True)
     listener_thread.start()
 
-    print("Press 'r' to start/stop recording, 'q' to quit.")
+    print("Press '1' or '2' to start/stop recording, 'q' to quit.")
 
     while not exit_requested:
         if recording:
             stop_requested = False
-            camera.record_video_streams(t_matrices, stop_flag=lambda: stop_requested)
+            camera.record_video_streams(t_matrices, task=task, serial_numbers=serial_numbers, stop_flag=lambda: stop_requested)
             recording = False
+            task = None 
         time.sleep(0.1)
 
     print("[INFO] Program exited.")
