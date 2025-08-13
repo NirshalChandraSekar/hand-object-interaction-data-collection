@@ -6,6 +6,8 @@ import open3d as o3d
 import pyrealsense2 as rs
 import math
 import os
+from moviepy.editor import ImageSequenceClip, AudioFileClip, concatenate_audioclips, AudioClip, VideoFileClip
+
 
 
 def save_video_from_dataset(dataset_path, output_video_path):
@@ -237,3 +239,114 @@ def view_combined_pcd(serial_nums, t_matrices, dataset_path='data'):
             aggregated_transformation = (aggregated_transformation @ t_matrix)
 
     o3d.visualization.draw_geometries(pcds)
+
+# The following functions are used to save synchronized multi-camera video with audio alignment
+
+def black_frame(shape):
+    return np.zeros(shape, dtype=np.uint8)
+
+def find_frame_index(timestamps, target_time):
+    """
+    Find index of the frame with timestamp <= target_time (closest before or equal).
+    Return None if no such frame.
+    """
+    idx = np.searchsorted(timestamps, target_time, side='right') - 1
+    if idx < 0:
+        return None
+    return idx
+
+def save_aligned_multicam_video(dataset_path, audio_path, output_path, fps=30):
+    with h5py.File(dataset_path, 'r') as dataset:
+        serial_numbers = list(dataset.keys())
+
+        # Load timestamps for each camera
+        camera_timestamps = {}
+        camera_frames_color = {}
+        camera_frames_depth = {}
+        camera_frame_shapes = {}
+
+        for s in serial_numbers:
+            ts = dataset[f'{s}/frames/timestamps'][()]  # float array, seconds relative to start_time
+            camera_timestamps[s] = ts
+
+            # Lazy access to frames datasets
+            camera_frames_color[s] = dataset[f'{s}/frames/color']
+            camera_frames_depth[s] = dataset[f'{s}/frames/depth']
+
+            # Grab shape from first frame (color)
+            sample_frame = camera_frames_color[s]['0'][()]
+            camera_frame_shapes[s] = sample_frame.shape  # (H, W, 3)
+
+        # Load absolute start times (epoch floats)
+        start_time = dataset[serial_numbers[0]]['params']['start_time'][()]
+        audio_start_time = dataset[serial_numbers[0]]['params']['audio_start_time'][()]
+
+        # Calculate absolute camera frame times
+        # Frames timestamps are relative to start_time, so:
+        global_start = min(ts[0] for ts in camera_timestamps.values()) + start_time
+        global_end = max(ts[-1] for ts in camera_timestamps.values()) + start_time
+
+        # Prepare output video writer
+        frame_height = sum(camera_frame_shapes[s][0] for s in serial_numbers)  # stack vertically
+        frame_width = camera_frame_shapes[serial_numbers[0]][1] * 2  # color + depth side by side
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        out = cv2.VideoWriter(output_path, fourcc, fps, (frame_width, frame_height))
+
+        num_frames = int(np.ceil((global_end - global_start) * fps))
+
+        for i in range(num_frames):
+            current_time = global_start + i / fps
+            rows = []
+            for s in serial_numbers:
+                ts = camera_timestamps[s] + start_time  # absolute times of frames for this camera
+                idx = find_frame_index(ts, current_time)
+                if idx is None:
+                    # Before camera started or no frame yet: black frames
+                    color_frame = black_frame(camera_frame_shapes[s])
+                    depth_frame = black_frame(camera_frame_shapes[s])
+                else:
+                    color_frame = camera_frames_color[s][str(idx)][()]
+                    depth_frame_raw = camera_frames_depth[s][str(idx)][()]
+                    # Normalize and colorize depth for visualization
+                    depth_vis = cv2.convertScaleAbs(depth_frame_raw, alpha=0.03)
+                    depth_frame = cv2.applyColorMap(depth_vis, cv2.COLORMAP_JET)
+
+                combined = np.hstack([color_frame, depth_frame])
+                rows.append(combined)
+
+            output_frame = np.vstack(rows)
+            out.write(output_frame)
+
+        out.release()
+
+        # Load audio and align
+        audio_clip = AudioFileClip(audio_path)
+
+        # Calculate offset between audio start and video start (both absolute timestamps)
+        offset = audio_start_time - global_start
+        print(f"Audio offset relative to video start: {offset:.3f} seconds")
+
+        def shift_audio(audio_clip, offset_sec):
+            if offset_sec > 0:
+                silence = AudioClip(lambda t: 0*t, duration=offset_sec, fps=audio_clip.fps)
+                return concatenate_audioclips([silence, audio_clip])
+            else:
+                # offset_sec negative: audio starts before video, trim audio start
+                return audio_clip.subclip(-offset_sec, audio_clip.duration)
+
+        shifted_audio = shift_audio(audio_clip, offset)
+
+        # Trim or loop audio to match video length
+        video_duration = num_frames / fps
+        if shifted_audio.duration > video_duration:
+            shifted_audio = shifted_audio.subclip(0, video_duration)
+        else:
+            shifted_audio = shifted_audio.audio_loop(duration=video_duration)
+
+        # Combine audio with saved video
+        video_clip = VideoFileClip(output_path).set_audio(shifted_audio)
+        final_output = output_path.replace(".mp4", "_final.mp4")
+        video_clip.write_videofile(final_output, codec='libx264', audio_codec='aac')
+
+        print(f"Final video with audio saved as: {final_output}")
+

@@ -39,7 +39,7 @@ class AudioRecorder:
         """
         self.frames = []
         self.stop_event.clear()
-        self.audio_start_time = datetime.now(timezone.utc).timestamp() - start_time
+        self.audio_start_time = time.time() - start_time
 
         p = pyaudio.PyAudio()
         stream = p.open(format=self.format,
@@ -173,7 +173,7 @@ class Camera:
                     params_group[serial].create_dataset("start_time", data=start_time, dtype=h5py.string_dtype(encoding='utf-8'))
 
                 print("[VIDEO] Recording started. Press 'r' again to stop.")
-                recording_start = datetime.now(timezone.utc).timestamp()
+                recording_start = time.time()
 
                 # Start audio thread
                 # Comment this out when you don't need it
@@ -182,6 +182,7 @@ class Camera:
                 audio_thread.start()
 
                 while not stop_flag():
+                    global_ts = time.time()
                     for i, pipeline in enumerate(pipelines):
                         frames = pipeline.wait_for_frames()
                         aligned_frames = align.process(frames)
@@ -196,7 +197,8 @@ class Camera:
 
                         serial = serial_numbers[i]
                         idx = frame_counters[serial]
-                        ts = datetime.now(timezone.utc).timestamp() - recording_start
+                        ts = global_ts - recording_start
+
 
                         color_groups[serial].create_dataset(str(idx), data=color_image, compression='gzip', compression_opts=9, chunks=True)
                         depth_groups[serial].create_dataset(str(idx), data=depth_image, compression='gzip', compression_opts=9, chunks=True)
@@ -369,10 +371,3 @@ def save_images():
         finally:
             # Stop the pipeline
             pipeline.stop()    
-
-# Translate Later
-# audio_start_absolute = start_time + audio_start_time  # global clock
-# frame_absolute_time = start_time + ts_from_hdf5
-
-# # audio sample index corresponding to video timestamp
-# sample_index = int((frame_absolute_time - audio_start_absolute) * 44100)
