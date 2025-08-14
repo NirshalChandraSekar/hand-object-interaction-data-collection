@@ -16,18 +16,19 @@ Steps performed:
 
 serial_nums = {0: '037522250789', 1: '213522250729', 2:'213622251272'}
 
-import camera_utils as cam
 import visualization_utils as vis
+import camera_refactor as cam
 import calibration_utils as calib
 
 if __name__ == "__main__":
-    cam.view_live_camera_streams()  
-    calib.write_camera_intrinsics_to_file()
-    calib.run_calibrations(serial_nums)
-    t_matrices = calib.get_transformation_matrices(serial_nums)
-    if t_matrices is not None:
-        cam.save_images()
-        vis.view_combined_pcd(serial_nums, t_matrices)
-    serial_list = list(serial_nums.values())
+    # cam.view_live_camera_streams()  
+    # calib.write_camera_intrinsics_to_file()
+    # calib.run_calibrations(serial_nums)
+    # t_matrices = calib.get_transformation_matrices(serial_nums)
+    # if t_matrices is not None:
+    #     cam.save_images()
+    #     vis.view_combined_pcd(serial_nums, t_matrices)
+    serial_list = list(serial_nums.values())[:2]
     print("Recording from cameras:", serial_list)
-    cam.record_audio_video(serial_list, t_matrices)
+    cam.record_audio_video(serial_list, None)
+        

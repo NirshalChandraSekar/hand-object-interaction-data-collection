@@ -270,8 +270,8 @@ def render_dataset_with_hand_tracking(dataset_path, use_offline_calib=False):
     vis.destroy_window()
 
 if __name__ == "__main__":
-    dataset_path = 'dataset/task2/videos/2025-08-12T21:03:09.938577+00:00.h5'  # <- change this to your actual path if needed
+    # dataset_path = 'dataset/task2/videos/2025-08-12T21:03:09.938577+00:00.h5'  # <- change this to your actual path if needed
 
-    # serial_nums = {0: '213522250729', 1:'213622251272', 2: '037522250789'}
-    render_dataset_with_hand_tracking(dataset_path)
-    # render_dataset_with_hand_tracking(dataset_path, True)
+    # # serial_nums = {0: '213522250729', 1:'213622251272', 2: '037522250789'}
+    # render_dataset_with_hand_tracking(dataset_path)
+    # # render_dataset_with_hand_tracking(dataset_path, True)
