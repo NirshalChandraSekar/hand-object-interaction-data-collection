@@ -20,16 +20,14 @@ class AudioRecorder:
         self.stop_event = threading.Event()
         self.audio_start_time = None
 
-    def record(self, start_time):
+    def record(self):
         """
         Start recording audio until stop_event is set.
         
-        Args:
-            start_time (float): The global recording start timestamp, used for synchronization.
         """
         self.frames = []
         self.stop_event.clear()
-        self.audio_start_time = time.time() - start_time
+        self.audio_start_time = time.time()
 
         p = pyaudio.PyAudio()
         stream = p.open(format=self.format,

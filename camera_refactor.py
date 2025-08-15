@@ -2,7 +2,7 @@ import pyrealsense2 as rs
 import numpy as np
 import h5py
 import cv2
-from datetime import datetime, timezone
+# from datetime import datetime, timezone
 from pynput import keyboard
 import threading
 import time
@@ -66,120 +66,121 @@ class Camera:
         output_file = f"{vid_dir}/{start_time}.h5"
         audio_output_file = f"{audio_dir}/{start_time}.wav"
 
-        with h5py.File(output_file, 'w') as h5file:
+        pipelines = []
+        aligners = {}
 
-            color_groups = {s: h5file.create_group(f"cameras/{s}/frames/color") for s in serial_numbers}
-            depth_groups = {s: h5file.create_group(f"cameras/{s}/frames/depth") for s in serial_numbers}
-            timestamps = {s: h5file.create_dataset(f"cameras/{s}/frames/timestamps", shape=(0,), maxshape=(None,), dtype='float16')
-                        for s in serial_numbers}
-            params_group = {s: h5file.create_group(f"cameras/{s}/params") for s in serial_numbers}
-            frame_counters = {s: 0 for s in serial_numbers}
-
-            metadata_group = h5file.create_group("metadata")
-            metadata_group.create_dataset("start_time", data=start_time)
-
-            if t_matrices is not None:
-                t_group = h5file.create_group("metadata/t_matrices")
-                for pair in t_matrices:
-                    t_group.create_dataset(pair, data=t_matrices[pair])
-
-            pipelines = []
-            aligners = {}
-
-            for i, dev in enumerate(devices):
-                serial_number = dev.get_info(rs.camera_info.serial_number)
-                try:
-                    # Attempt to stop any existing pipeline for this device
-                    for pipeline in getattr(dev, 'pipelines', []):
-                        pipeline.stop()
-                except Exception:
-                    # If there’s no active pipeline, ignore
-                    pass
-                pipeline = rs.pipeline()
-                depth_sensor = dev.query_sensors()[0]
-                targetSyncMode = 1 if i == 0 else 2  # Master/slave
-                depth_sensor.set_option(rs.option.inter_cam_sync_mode, targetSyncMode)
-
-                config = rs.config()
-                config.enable_device(serial_number)
-                config.enable_stream(rs.stream.color, 1280, 720, rs.format.bgr8, 30)
-                config.enable_stream(rs.stream.depth, 1280, 720, rs.format.z16, 30)
-
-                pipeline.start(config)
-                pipelines.append(pipeline)
-                aligners[serial_number] = rs.align(rs.stream.color)
-
-                intr = self.get_camera_intrinsics(pipeline)
-                intr_group = params_group[serial_number].create_group("intrinsics")
-                intr_group.create_dataset("width", data=intr.width)
-                intr_group.create_dataset("height", data=intr.height)
-                intr_group.create_dataset("ppx", data=intr.ppx)
-                intr_group.create_dataset("ppy", data=intr.ppy)
-                intr_group.create_dataset("fx", data=intr.fx)
-                intr_group.create_dataset("fy", data=intr.fy)
-                intr_group.create_dataset("model", data=str(intr.model))
-                intr_group.create_dataset("coeffs", data=intr.coeffs)
-
-            master_serial = serial_numbers[0]
-            master_pipe = pipelines[0]
-            slave_pipes = pipelines[1:]
-
-            # Audio thread
-            recording_start = time.time()
-            audio_recorder = AudioRecorder(audio_output_file)
-            audio_thread = threading.Thread(target=audio_recorder.record, args=(recording_start,))
-            audio_thread.start()
-
-            print(f"[INFO] Recording started.")
+        for i, dev in enumerate(devices):
+            serial_number = dev.get_info(rs.camera_info.serial_number)
             try:
-                while not stop_flag():
-                    # Wait for master frame
-                    frame_timestamps = {}
-                    master_frames = master_pipe.wait_for_frames()
-                    master_aligned = aligners[master_serial].process(master_frames)
-                    synced_frames = {master_serial: master_aligned}
-                    frame_timestamps[master_serial] = time.time() - recording_start
-
-                    # Grab slave frames
-                    for i, slave_pipe in enumerate(slave_pipes, start=1):
-                        serial = serial_numbers[i]
-                        frames = slave_pipe.wait_for_frames()
-                        synced_frames[serial] = aligners[serial].process(frames)
-                        frame_timestamps[serial] = time.time() - recording_start
-
-                    # Save frames
-                    for i, serial in enumerate(serial_numbers):
-                        frames = synced_frames[serial]
-                        color_frame = frames.get_color_frame()
-                        depth_frame = frames.get_depth_frame()
-                        if not color_frame or not depth_frame:
-                            continue
-
-                        color_img = np.asanyarray(color_frame.get_data())
-                        depth_img = np.asanyarray(depth_frame.get_data()).astype(np.uint16)
-                        idx = frame_counters[serial]
-
-                        color_groups[serial].create_dataset(str(idx), data=color_img, compression='gzip', compression_opts=9, chunks=True)
-                        depth_groups[serial].create_dataset(str(idx), data=depth_img, compression='gzip', compression_opts=9, chunks=True)
-                        timestamps[serial].resize((idx + 1,))
-                        timestamps[serial][idx] = np.float16(frame_timestamps[serial])
-                        frame_counters[serial] += 1
-
-                # Stop audio
-                audio_recorder.stop_event.set()
-                audio_thread.join()
-
-                metadata_group.create_dataset("audio_start_time", data=audio_recorder.audio_start_time)
-            except Exception as e:
-                os.remove(output_file)
-                os.remove(audio_output_file)
-                print(f"[ERROR] Exception during recording: {e}")
-            finally:
-
-                # Stop pipelines
-                for pipeline in pipelines:
+                # Attempt to stop any existing pipeline for this device
+                for pipeline in getattr(dev, 'pipelines', []):
                     pipeline.stop()
-                print(f"[INFO] Recording stopped. Files saved: {output_file}, {audio_output_file}")
+            except Exception:
+                # If there’s no active pipeline, ignore
+                pass
+            pipeline = rs.pipeline()
+            depth_sensor = dev.query_sensors()[0]
+            targetSyncMode = 1 if i == 0 else 2  # Master/slave
+            depth_sensor.set_option(rs.option.inter_cam_sync_mode, targetSyncMode)
+
+            config = rs.config()
+            config.enable_device(serial_number)
+            config.enable_stream(rs.stream.color, 1280, 720, rs.format.bgr8, 30)
+            config.enable_stream(rs.stream.depth, 1280, 720, rs.format.z16, 30)
+
+            pipeline.start(config)
+            pipelines.append(pipeline)
+            aligners[serial_number] = rs.align(rs.stream.color)
+
+        master_serial = serial_numbers[0]
+        
+        # Audio thread
+        audio_recorder = AudioRecorder(audio_output_file)
+        audio_thread = threading.Thread(target=audio_recorder.record, args=())
+        audio_thread.start()
+
+        color_buffers = {s: [] for s in serial_numbers}
+        depth_buffers = {s: [] for s in serial_numbers}
+        timestamp_buffers = {s: [] for s in serial_numbers}
+
+        print(f"[INFO] Recording started.")
+        recording_start = time.time()
+
+        try:
+            while not stop_flag():
+                master_serial = serial_numbers[0]
+                master_frames = pipelines[0].wait_for_frames()
+                master_aligned = aligners[master_serial].process(master_frames)
+                synced_frames = {master_serial: master_aligned}
+                frame_ts = {master_serial: time.time() - recording_start}
+
+                for i, serial in enumerate(serial_numbers[1:], start=1):
+                    frames = pipelines[i].wait_for_frames()
+                    aligned = aligners[serial].process(frames)
+                    synced_frames[serial] = aligned
+                    frame_ts[serial] = time.time() - recording_start
+
+                for serial in serial_numbers:
+                    frames = synced_frames[serial]
+                    color_frame = frames.get_color_frame()
+                    depth_frame = frames.get_depth_frame()
+                    if not color_frame or not depth_frame:
+                        continue
+                    color_img = np.asanyarray(color_frame.get_data())
+                    depth_img = np.asanyarray(depth_frame.get_data()).astype(np.uint16)
+
+                    color_buffers[serial].append(color_img)
+                    depth_buffers[serial].append(depth_img)
+                    timestamp_buffers[serial].append(frame_ts[serial])
+
+            print("[INFO] Stopping recording...")
+
+            # Stop audio
+            audio_recorder.stop_event.set()
+            audio_thread.join()
+
+            # Save to HDF5
+            with h5py.File(output_file, 'w') as h5file:
+                metadata_group = h5file.create_group("metadata")
+                metadata_group.create_dataset("start_time", data=start_time)
+                metadata_group.create_dataset("recording_start_time", data=recording_start)
+                metadata_group.create_dataset("audio_start_time", data=audio_recorder.audio_start_time)
+
+                if t_matrices is not None:
+                    t_group = metadata_group.create_group("t_matrices")
+                    for pair, matrix in t_matrices.items():
+                        t_group.create_dataset(pair, data=matrix)
+
+                for i, serial in enumerate(serial_numbers):
+                    cam_group = h5file.create_group(f"cameras/{serial}")
+                    frame_group = cam_group.create_group("frames")
+                    frame_group.create_dataset("color", data=np.array(color_buffers[serial], dtype=np.uint8), compression="gzip")
+                    frame_group.create_dataset("depth", data=np.array(depth_buffers[serial], dtype=np.uint16), compression="gzip")
+                    frame_group.create_dataset("timestamps", data=np.array(timestamp_buffers[serial], dtype=np.float32))
+
+                    # Intrinsics
+                    intr = self.get_camera_intrinsics(pipelines[i])
+                    intr_group = cam_group.create_group("params/intrinsics")
+                    intr_group.create_dataset("width", data=intr.width)
+                    intr_group.create_dataset("height", data=intr.height)
+                    intr_group.create_dataset("ppx", data=intr.ppx)
+                    intr_group.create_dataset("ppy", data=intr.ppy)
+                    intr_group.create_dataset("fx", data=intr.fx)
+                    intr_group.create_dataset("fy", data=intr.fy)
+                    intr_group.create_dataset("model", data=str(intr.model))
+                    intr_group.create_dataset("coeffs", data=intr.coeffs)
+
+            print(f"[INFO] Recording saved: {output_file}, {audio_output_file}")
+        except Exception as e:
+            os.remove(output_file)
+            os.remove(audio_output_file)
+            print(f"[ERROR] Exception during recording: {e}")
+        finally:
+
+            # Stop pipelines
+            for pipeline in pipelines:
+                pipeline.stop()
+            print(f"[INFO] Recording stopped. Files saved: {output_file}, {audio_output_file}")
 
 
 def listen_for_keys():
