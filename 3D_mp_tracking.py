@@ -76,6 +76,7 @@ def create_pcd(index, serial_number, frame_index, dataset, intrinsic, transform_
         o3d.geometry.Image(color_image),
         o3d.geometry.Image(depth_image),
         depth_scale=1.0,
+        depth_trunc=2.0,
         convert_rgb_to_intensity=False
     )
     
@@ -157,7 +158,7 @@ def process_meidapipe_results(results, intrinsic, depth_image, t_matrix):
     wrist_3d_transformed = t_matrix @ wrist_3d_homogeneous  # Matrix-vector multiplication
     return wrist_3d_transformed[:3]  # Drop the homogeneous component
 
-def render_dataset_with_hand_tracking(dataset_path, use_offline_calib=False):
+def render_dataset_with_hand_tracking(dataset_path, serial_numbers=None, use_offline_calib=False):
     """
     Visualize a multi-camera RGB-D dataset with MediaPipe hand tracking.
     
@@ -176,20 +177,22 @@ def render_dataset_with_hand_tracking(dataset_path, use_offline_calib=False):
     """
     with h5py.File(dataset_path, 'r') as dataset:
         #Setup
-        serial_list = list(dataset.keys())[:3]  # example to get first 3 serial strings
-        serial_numbers = dict(enumerate(serial_list))
+        if serial_numbers is None:
+            serial_list = list(dataset.keys())[:3]  # example to get first 3 serial strings
+            serial_numbers = dict(enumerate(serial_list))
         print("Cameras in dataset:", serial_numbers)
 
         pcd_formatted_intrinsics, intrinsic_data_dict = load_intrinsics(dataset, serial_numbers)
         
         transform_matrices = [np.eye(4)]
 
-        if use_offline_calib or 't_matrices' not in dataset:
-            calib.write_camera_intrinsics_to_file()
-            calib.run_calibrations(serial_numbers, dataset_path)
-            t_matrix = calib.get_transformation_matrices(serial_numbers)
-        else:
-            t_matrix = dataset['t_matrices']
+        t_matrix = calib.get_transformation_matrices(serial_numbers)
+        # if use_offline_calib or 't_matrices' not in dataset:
+        #     calib.write_camera_intrinsics_to_file()
+        #     calib.run_calibrations(serial_numbers, dataset_path)
+        #     t_matrix = calib.get_transformation_matrices(serial_numbers)
+        # else:
+        #     t_matrix = dataset['t_matrices']
 
         for i in range(1, len(serial_numbers)):
             key = f'{serial_numbers[i-1]}-{serial_numbers[i]}'
@@ -258,9 +261,9 @@ def render_dataset_with_hand_tracking(dataset_path, use_offline_calib=False):
                         sphere_visible = False
             
             # Orient the view
-            view_control.set_front([0, -0.0, -1.0])  
+            view_control.set_front([0, 0.0, -1.0])  
             view_control.set_lookat([0, 0, 0])       
-            view_control.set_up([0, -1.0, 0])        
+            view_control.set_up([1.0, 1.0, 0])        
             view_control.set_zoom(0.5)
 
             # Update with each frame's point clouds
@@ -270,8 +273,11 @@ def render_dataset_with_hand_tracking(dataset_path, use_offline_calib=False):
     vis.destroy_window()
 
 if __name__ == "__main__":
-    dataset_path = 'dataset/task2/videos/2025-08-12T21:03:09.938577+00:00.h5'  # <- change this to your actual path if needed
+    dataset_path = 'dataset/task1/videos/2025-08-15T19:03:43.970611+00:00.h5'  # <- change this to your actual path if needed
 
-    # serial_nums = {0: '213522250729', 1:'213622251272', 2: '037522250789'}
-    render_dataset_with_hand_tracking(dataset_path)
+    serial_nums = {0: '037522250789', 1: '213522250729', 2:'213622251272'}
+    serial_nums = {0: '2135222q50729', 1: '037522250789', 2:'213622251272'}
+    serial_nums = {0: '213622251272', 1: '213522250729', 2:'037522250789'}
+
+    render_dataset_with_hand_tracking(dataset_path, serial_nums)
     # render_dataset_with_hand_tracking(dataset_path, True)

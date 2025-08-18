@@ -6,6 +6,7 @@ import open3d as o3d
 import pyrealsense2 as rs
 import math
 import os
+import calibration_utils as calib
 
 
 def save_video_from_dataset(dataset_path, output_video_path):
@@ -23,7 +24,7 @@ def save_video_from_dataset(dataset_path, output_video_path):
     with h5py.File(dataset_path, 'r') as dataset:
         serial_numbers = list(dataset.keys())
         num_frames = min(len(dataset[f'{serial}/frames/color']) for serial in serial_numbers)
-        frame_size = (640, 480)  # Width x Height
+        frame_size = (1280, 720)  # Width x Height
 
         output_width = frame_size[0] * 2  # RGB + Depth
         output_height = frame_size[1] * len(serial_numbers)  # One row per camera
@@ -38,17 +39,9 @@ def save_video_from_dataset(dataset_path, output_video_path):
                 color_image = dataset[f'{serial}/frames/color'][str(frame_idx)][()]
                 depth_image = dataset[f'{serial}/frames/depth'][str(frame_idx)][()]
 
-                # Get timestamp
-                timestamp = dataset[f'{serial}/frames/timestamps'][frame_idx]
-                timestamp_text = f"{serial} | Time: {timestamp:.2f} ms"
-
                 # Normalize and colorize depth
                 depth_vis = cv2.convertScaleAbs(depth_image, alpha=0.03)
                 depth_colored = cv2.applyColorMap(depth_vis, cv2.COLORMAP_JET)
-
-                # Add timestamp to color image
-                cv2.putText(color_image, timestamp_text, (10, 30),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
 
                 # Concatenate
                 camera_row = np.hstack([color_image, depth_colored])
@@ -195,6 +188,7 @@ def view_combined_pcd(serial_nums, t_matrices, dataset_path='data'):
     aggregated_transformation = np.eye(4)
 
     for i, serial_num in serial_nums.items():
+        
         # Load color and depth images
         color_image = cv2.imread(os.path.join(dataset_path, f'{serial_num}_color.png'))
         color_image = cv2.cvtColor(color_image, cv2.COLOR_BGR2RGB)
@@ -218,7 +212,6 @@ def view_combined_pcd(serial_nums, t_matrices, dataset_path='data'):
             o3d.geometry.Image(color_image),
             o3d.geometry.Image(depth_image),
             depth_scale=1.0,
-            depth_trunc=3.0,
             convert_rgb_to_intensity=False
         )
 
@@ -237,3 +230,8 @@ def view_combined_pcd(serial_nums, t_matrices, dataset_path='data'):
             aggregated_transformation = (aggregated_transformation @ t_matrix)
 
     o3d.visualization.draw_geometries(pcds)
+
+serial_nums = {0: '213622251272', 1: '213522250729', 2:'037522250789'}
+
+# list(serial_nums.values())
+# view_stream_from_dataset("dataset/task2/videos/2025-08-15T19:04:19.412665+00:00.h5", list(serial_nums.values()))

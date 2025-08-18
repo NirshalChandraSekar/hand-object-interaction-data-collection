@@ -9,6 +9,7 @@ import time
 import pyaudio
 import wave
 import os
+import subprocess
 
 recording = False
 stop_requested = False

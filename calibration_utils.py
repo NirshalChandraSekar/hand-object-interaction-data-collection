@@ -260,30 +260,34 @@ def run_calibrations(serial_numbers, dataset_path = None):
     """
     script_path = "calibration/offline_calib.sh" if dataset_path is not None else "calibration/online_calib.sh"
     for i in range((len(serial_numbers) - 1)):
-        serial_master = serial_numbers[i]
-        serial_slave = serial_numbers[i+1]
-        id0 = f"{serial_master}"
-        id1 = f"{serial_slave}"
-        print(f"Running calibration for {id0} and {id1}")
+        try:
+            serial_master = serial_numbers[i]
+            serial_slave = serial_numbers[i+1]
+            id0 = f"{serial_master}"
+            id1 = f"{serial_slave}"
+            print(f"Running calibration for {id0} and {id1}")
 
-        if dataset_path:
-           print("Capturing calibration frames...")
-           create_calibration_images(dataset_path, [serial_master, serial_slave])
+            if dataset_path:
+                print("Capturing calibration frames...")
+                create_calibration_images(dataset_path, [serial_master, serial_slave])
 
-        with open(script_path, "r") as f:
-            content = f.read()
+            with open(script_path, "r") as f:
+                content = f.read()
 
-        # Replace values after export ID0=
-        # Replace only the values after export ID0= and export ID1= without changing the rest
-        content = re.sub(r"(export\s+ID0=)[^\s#]+", lambda m: m.group(1) + id0, content)
-        content = re.sub(r"(export\s+ID1=)[^\s#]+", lambda m: m.group(1) + id1, content)
+            # Replace values after export ID0=
+            # Replace only the values after export ID0= and export ID1= without changing the rest
+            content = re.sub(r"(export\s+ID0=)[^\s#]+", lambda m: m.group(1) + id0, content)
+            content = re.sub(r"(export\s+ID1=)[^\s#]+", lambda m: m.group(1) + id1, content)
 
 
-        with open(script_path, "w") as f:
-            f.write(content)
+            with open(script_path, "w") as f:
+                f.write(content)
 
-        subprocess.run(["./" + script_path], check=True)
-        time.sleep(10)
+            subprocess.run(["./" + script_path], check=True)
+            time.sleep(10)
+        except subprocess.CalledProcessError as e:
+            print(f"Error running calibration script for {id0} and {id1}: {e}")
+            continue
 
 def get_transformation_matrices(serial_numbers):
     t_matrices = {}

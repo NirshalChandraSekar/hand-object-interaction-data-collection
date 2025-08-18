@@ -14,20 +14,38 @@ Steps performed:
 # Dict order changes depending on calibration results
 # Order is saved as the order of serial numbers in the recording file
 
-serial_nums = {0: '037522250789', 1: '213522250729', 2:'213622251272'}
+serial_nums = [
+    {0: '213622251272', 1: '213522250729', 2: '037522250789'},
+    {0: '213622251272', 1: '037522250789', 2: '213522250729'},
+    {0: '213522250729', 1: '213622251272', 2: '037522250789'},
+    {0: '213522250729', 1: '037522250789', 2: '213622251272'},
+    {0: '037522250789', 1: '213622251272', 2: '213522250729'},
+    {0: '037522250789', 1: '213522250729', 2: '213622251272'}
+]
+
+
 
 import camera_utils as cam
+import camera_refactor
 import visualization_utils as vis
 import calibration_utils as calib
 
-if __name__ == "__main__":
+def set_up_tools():
     cam.view_live_camera_streams()  
     calib.write_camera_intrinsics_to_file()
     calib.run_calibrations(serial_nums)
     t_matrices = calib.get_transformation_matrices(serial_nums)
-    if t_matrices is not None:
-        cam.save_images()
+    if t_matrices:
         vis.view_combined_pcd(serial_nums, t_matrices)
-    serial_list = list(serial_nums.values())
+    return t_matrices
+
+if __name__ == "__main__":
+    t_matrices = set_up_tools()
+    if t_matrices:
+        vis.view_combined_pcd(serial_nums, t_matrices)
+    serial_list = list(serial_nums[0].values())
+    camera = camera_refactor.CameraRecorder()
     print("Recording from cameras:", serial_list)
-    cam.record_audio_video(serial_list, t_matrices)
+
+    camera.start_recording()
+        # cam.record_audio_video(serial_list)
