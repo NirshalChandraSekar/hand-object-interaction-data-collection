@@ -1,7 +1,7 @@
 #!/bin/bash
 
+export ID0=213622251272 # change this
 export ID1=037522250789 # change this
-export ID0=213522250729 # change this
 
 $HOME/calibration/arpg/releases/bin/vicalib \
  -grid_preset small \

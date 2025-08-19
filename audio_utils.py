@@ -37,6 +37,7 @@ class AudioRecorder:
                        channels=self.channels,
                        rate=self.rate,
                        input=True,
+                        input_device_index=10,  # Adjust device name as needed
                        frames_per_buffer=self.chunk)
 
 
@@ -135,9 +136,6 @@ def graph_audio():
    plt.ylabel("Amplitude")
    plt.legend()
    plt.show()
-
-
-# graph_audio()
 
 
 

@@ -9,7 +9,7 @@
             <down> [ 0; 1; 0 ] </down>
             <forward> [ 0; 0; 1 ] </forward>
             <!-- Camera parameters ordered as per type name. -->
-            <params> [ 643.522216796875; 642.8402099609375; 640.6505126953125; 363.3234558105469; 0.000; 0.000; 0.000 ] </params>
+            <params> [ 643.1719970703125; 642.4904174804688; 640.6505126953125; 363.3234558105469; 0.000; 0.000; 0.000 ] </params>
         </camera_model>
         <pose>
             <!-- Camera pose. World from Camera point transfer. 3x4 matrix, in the RDF frame convention defined above -->

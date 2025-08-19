@@ -6,3 +6,4 @@ depth_pngs/
 pointclouds/
 2D_mediapipe_tracking.py
 calibration.py
+test_hand_reconstruction/

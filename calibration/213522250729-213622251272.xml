@@ -8,7 +8,7 @@
             <down> [ 0; 1; 0 ] </down>
             <forward> [ 0; 0; 1 ] </forward>
             <!-- Camera parameters ordered as per type name. -->
-            <params> [ 643.5222; 642.8402; 640.6505; 363.3235; 0; 0; 0 ] </params>
+            <params> [ 643.6973; 643.0151; 640.6505; 363.3235; 0; 0; 0 ] </params>
         </camera_model>
         <pose>
             <!-- Camera pose. World from Camera point transfer. 3x4 matrix, in the RDF frame convention defined above -->
@@ -28,7 +28,7 @@
         </camera_model>
         <pose>
             <!-- Camera pose. World from Camera point transfer. 3x4 matrix, in the RDF frame convention defined above -->
-            <T_wc> [ -0.6399477, -0.3684143, -0.6743426, 0.5541798; 0.581, -0.8063198, -0.1108485, -0.1241781; -0.5028976, -0.4627303, 0.7300512, 0.3834946 ] </T_wc>
+            <T_wc> [ -0.8036099, 0.4984133, -0.325262, 0.3563778; -0.279311, -0.7984273, -0.5333847, 0.1776932; -0.5255441, -0.3377839, 0.7808364, -0.1403102 ] </T_wc>
         </pose>
     </camera>
 </rig>

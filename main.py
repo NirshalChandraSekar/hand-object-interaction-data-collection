@@ -11,6 +11,10 @@ Steps performed:
 6. Record synchronized audio and video data.
 """
 
+import camera_utils as cam
+import visualization_utils as vis
+import calibration_utils as calib
+
 # Dict order changes depending on calibration results
 # Order is saved as the order of serial numbers in the recording file
 
@@ -23,29 +27,21 @@ serial_nums = [
     {0: '037522250789', 1: '213522250729', 2: '213622251272'}
 ]
 
-
-
-import camera_utils as cam
-import camera_refactor
-import visualization_utils as vis
-import calibration_utils as calib
+serial_dict = serial_nums[1]  # Default to first configuration
 
 def set_up_tools():
     cam.view_live_camera_streams()  
     calib.write_camera_intrinsics_to_file()
-    calib.run_calibrations(serial_nums)
-    t_matrices = calib.get_transformation_matrices(serial_nums)
-    if t_matrices:
-        vis.view_combined_pcd(serial_nums, t_matrices)
-    return t_matrices
-
+    calib.run_calibrations(serial_dict)
+   
 if __name__ == "__main__":
-    t_matrices = set_up_tools()
+    # set_up_tools()
+    t_matrices = calib.get_transformation_matrices(serial_dict)
     if t_matrices:
-        vis.view_combined_pcd(serial_nums, t_matrices)
-    serial_list = list(serial_nums[0].values())
-    camera = camera_refactor.CameraRecorder()
+        cam.save_images()
+        vis.view_combined_pcd(serial_dict, t_matrices)
+    serial_list = list(serial_dict.values())
     print("Recording from cameras:", serial_list)
 
-    camera.start_recording()
-        # cam.record_audio_video(serial_list)
+    camera = cam.CameraRecorder()
+    camera.start_recording(serial_list, t_matrices)

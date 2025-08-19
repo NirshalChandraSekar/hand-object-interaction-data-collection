@@ -7,6 +7,7 @@ import pyrealsense2 as rs
 import math
 import os
 import calibration_utils as calib
+import camera_utils as cam
 
 
 def save_video_from_dataset(dataset_path, output_video_path):
@@ -109,7 +110,7 @@ def run_mediapipe_on_videos(dataset_path, output_video_path):
 
 
 
-def view_stream_from_dataset(dataset_path, serial_numbers):
+def view_stream_from_dataset(dataset_path):
     """
     Displays synchronized color and depth streams from the dataset for all cameras.
 
@@ -118,6 +119,7 @@ def view_stream_from_dataset(dataset_path, serial_numbers):
         serial_numbers (list): List of camera serial numbers to visualize.
     """
     with h5py.File(dataset_path, 'r') as dataset:
+        serial_numbers = list(dataset.keys())[:-1]
         num_frames = min(len(dataset[f'{serial_number}/frames/color']) for serial_number in serial_numbers)
 
 
@@ -127,10 +129,10 @@ def view_stream_from_dataset(dataset_path, serial_numbers):
                 depth_image = dataset[f'{serial}/frames/depth'][str(frame_idx)][()]
 
                 cv2.imshow(f'Color Image {serial}', color_image)
-                # Normalize depth for visualization
-                depth_vis = cv2.convertScaleAbs(depth_image, alpha=0.03)
-                depth_colored = cv2.applyColorMap(depth_vis, cv2.COLORMAP_JET)
-                cv2.imshow(f'Depth Image {serial}', depth_colored)
+                # # Normalize depth for visualization
+                # depth_vis = cv2.convertScaleAbs(depth_image, alpha=0.03)
+                # depth_colored = cv2.applyColorMap(depth_vis, cv2.COLORMAP_JET)
+                # cv2.imshow(f'Depth Image {serial}', depth_colored)
 
             if cv2.waitKey(100) & 0xFF == ord('q'):
                 break
@@ -227,11 +229,18 @@ def view_combined_pcd(serial_nums, t_matrices, dataset_path='data'):
             slave = serial_nums[i + 1]
             t_matrix = t_matrices[f"{master}-{slave}"]
 
-            aggregated_transformation = (aggregated_transformation @ t_matrix)
+            aggregated_transformation = aggregated_transformation @ t_matrix
 
     o3d.visualization.draw_geometries(pcds)
 
-serial_nums = {0: '213622251272', 1: '213522250729', 2:'037522250789'}
+# serial_nums = {0: '213622251272', 1: '213522250729', 2:'037522250789'}
 
 # list(serial_nums.values())
 # view_stream_from_dataset("dataset/task2/videos/2025-08-15T19:04:19.412665+00:00.h5", list(serial_nums.values()))
+
+# cam.save_images()
+# # calib.run_calibrations({0: '213622251272', 1: '213522250729', 2: '037522250789'}, "dataset/task2/videos/2025-08-18T16-59+00-00.h5")
+# t_matrices = calib.get_transformation_matrices({0: '213522250729', 1: '037522250789'})
+# view_combined_pcd({0: '213522250729', 1: '037522250789'}, t_matrices)
+
+# view_stream_from_dataset("dataset/task2/videos/2025-08-18T18-26+00-00.h5")

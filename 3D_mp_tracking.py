@@ -178,7 +178,7 @@ def render_dataset_with_hand_tracking(dataset_path, serial_numbers=None, use_off
     with h5py.File(dataset_path, 'r') as dataset:
         #Setup
         if serial_numbers is None:
-            serial_list = list(dataset.keys())[:3]  # example to get first 3 serial strings
+            serial_list = list(dataset.keys())[:-1]  # example to get all serial strings except the last one
             serial_numbers = dict(enumerate(serial_list))
         print("Cameras in dataset:", serial_numbers)
 
@@ -273,10 +273,10 @@ def render_dataset_with_hand_tracking(dataset_path, serial_numbers=None, use_off
     vis.destroy_window()
 
 if __name__ == "__main__":
-    dataset_path = 'dataset/task1/videos/2025-08-15T19:03:43.970611+00:00.h5'  # <- change this to your actual path if needed
+    dataset_path = 'dataset/task2/videos/2025-08-18T18-26+00-00.h5'  # <- change this to your actual path if needed
 
-    serial_nums = {0: '037522250789', 1: '213522250729', 2:'213622251272'}
-    serial_nums = {0: '2135222q50729', 1: '037522250789', 2:'213622251272'}
+    # serial_nums = {0: '037522250789', 1: '213522250729', 2:'213622251272'}
+    # serial_nums = {0: '213522250729', 1: '037522250789', 2:'213622251272'}
     serial_nums = {0: '213622251272', 1: '213522250729', 2:'037522250789'}
 
     render_dataset_with_hand_tracking(dataset_path, serial_nums)
